@@ -110,8 +110,8 @@ contract AICrowdfundingCampaign is Ownable, ReentrancyGuard {
      * @dev Contribute PYUSD to the campaign
      */
     function contribute(uint256 _amount) external nonReentrant {
-        require(campaignInfo.isActive, "Campaign not active");
         require(block.timestamp <= campaignInfo.endTime, "Campaign ended");
+        require(campaignInfo.isActive, "Campaign not active");
         require(_amount > 0, "Amount must be > 0");
 
         pyusd.safeTransferFrom(msg.sender, address(this), _amount);
@@ -122,6 +122,11 @@ contract AICrowdfundingCampaign is Ownable, ReentrancyGuard {
         }
         contributions[msg.sender] += _amount;
         campaignInfo.totalRaised += _amount;
+
+        // Check if goal reached after contribution
+        if (campaignInfo.totalRaised >= campaignInfo.totalGoal) {
+            campaignInfo.isActive = false;
+        }
 
         emit ContributionMade(msg.sender, _amount);
     }

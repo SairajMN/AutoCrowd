@@ -22,6 +22,7 @@ contract AIVerificationHandler is AccessControl {
 
     mapping(bytes32 => VerificationRequest) public verificationRequests;
     mapping(address => bool) public authorizedCampaigns;
+    bytes32[] public pendingRequests;
 
     event VerificationRequested(
         bytes32 indexed requestId,
@@ -78,7 +79,7 @@ contract AIVerificationHandler is AccessControl {
             requestId := keccak256(ptr, 0x80)
         }
 
-        require(!verificationRequests[requestId].isProcessed, "Request already exists");
+        require(verificationRequests[requestId].timestamp == 0, "Request already exists");
 
         verificationRequests[requestId] = VerificationRequest({
             campaignAddress: _campaign,
@@ -89,6 +90,8 @@ contract AIVerificationHandler is AccessControl {
             isApproved: false,
             aiReportHash: _evidenceHash
         });
+
+        pendingRequests.push(requestId);
 
         emit VerificationRequested(requestId, _campaign, _milestoneId, msg.sender);
 
@@ -110,6 +113,9 @@ contract AIVerificationHandler is AccessControl {
         request.isProcessed = true;
         request.isApproved = _approved;
         request.aiReportHash = _aiReportHash;
+
+        // Remove from pending requests array
+        _removePendingRequest(_requestId);
 
         emit VerificationCompleted(_requestId, _approved, _aiReportHash);
 
@@ -159,6 +165,19 @@ contract AIVerificationHandler is AccessControl {
     }
 
     /**
+     * @dev Internal function to remove processed request from pending array
+     */
+    function _removePendingRequest(bytes32 _requestId) internal {
+        for (uint256 i = 0; i < pendingRequests.length; i++) {
+            if (pendingRequests[i] == _requestId) {
+                pendingRequests[i] = pendingRequests[pendingRequests.length - 1];
+                pendingRequests.pop();
+                break;
+            }
+        }
+    }
+
+    /**
      * @dev Get pending verification requests (for AI service to process)
      */
     function getPendingRequests(uint256 _startIndex, uint256 _count)
@@ -166,23 +185,20 @@ contract AIVerificationHandler is AccessControl {
         view
         returns (bytes32[] memory)
     {
-        bytes32[] memory allKeys = new bytes32[](_count);
-        uint256 found = 0;
-
-        // This is a simplified approach - in production, maintain an array of pending requests
-        for (uint256 i = _startIndex; i < type(uint256).max && found < _count; i++) {
-            bytes32 potentialId = bytes32(i);
-            if (verificationRequests[potentialId].timestamp > 0 &&
-                !verificationRequests[potentialId].isProcessed) {
-                allKeys[found] = potentialId;
-                found++;
-            }
+        if (_startIndex >= pendingRequests.length) {
+            return new bytes32[](0);
         }
 
-        // Trim array to actual results
-        bytes32[] memory result = new bytes32[](found);
-        for (uint256 i = 0; i < found; i++) {
-            result[i] = allKeys[i];
+        uint256 endIndex = _startIndex + _count;
+        if (endIndex > pendingRequests.length) {
+            endIndex = pendingRequests.length;
+        }
+
+        uint256 resultLength = endIndex - _startIndex;
+        bytes32[] memory result = new bytes32[](resultLength);
+
+        for (uint256 i = 0; i < resultLength; i++) {
+            result[i] = pendingRequests[_startIndex + i];
         }
 
         return result;

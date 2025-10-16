@@ -1,0 +1,16 @@
+{
+    "name": "contracts",
+    "version": "1.0.0",
+    "description": "Foundry smart contracts for AutoCrowd",
+    "scripts": {
+        "build": "forge build",
+        "test": "forge test",
+        "deploy": "forge script script/Deploy.s.sol --rpc-url $BASE_SEPOLIA_RPC_URL --private-key $PRIVATE_KEY --broadcast --verify",
+        "verify": "forge script script/Verify.s.sol --rpc-url $BASE_SEPOLIA_RPC_URL --private-key $PRIVATE_KEY",
+        "lint": "solhint 'src/**/*.sol'",
+        "format": "forge fmt"
+    },
+    "devDependencies": {
+        "solhint": "^4.0.0"
+    }
+}
