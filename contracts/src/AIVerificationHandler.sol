@@ -130,8 +130,9 @@ contract AIVerificationHandler is AccessControl {
     function _notifyCampaign(address _campaign, uint256 _milestoneId, bool _approved) internal {
         // For hackathon: simplified callback
         // In production, use proper interface calls or oracle callbacks
+        uint8 verdict = _approved ? uint8(1) : uint8(0); // 1=approved, 0=rejected
         (bool success, ) = _campaign.call(
-            abi.encodeWithSignature("verifyMilestone(uint256,bool)", _milestoneId, _approved)
+            abi.encodeWithSignature("onAiVerdict(uint256,uint8)", _milestoneId, verdict)
         );
         require(success, "Campaign notification failed");
     }

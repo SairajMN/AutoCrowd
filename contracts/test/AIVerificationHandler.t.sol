@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {Test, console} from "forge-std/Test.sol";
+import {Test} from "forge-std/Test.sol";
 import {AIVerificationHandler} from "../src/AIVerificationHandler.sol";
 
 contract AIVerificationHandlerTest is Test {
@@ -100,10 +100,10 @@ contract AIVerificationHandlerTest is Test {
 
         // Check updated request
         (
-            address completedCampaignAddress,
-            uint256 completedMilestoneId,
-            address completedRequestRequester,
-            uint256 completedRequestTimestamp,
+            ,
+            ,
+            ,
+            ,
             bool completedRequestIsProcessed,
             bool completedRequestIsApproved,
             string memory completedRequestAiReportHash
@@ -254,8 +254,8 @@ contract AIVerificationHandlerTest is Test {
         );
 
         (
-            address campaignAddress,
-            uint256 milestoneId,
+            ,
+            ,
             address requestRequester,
             ,
             ,

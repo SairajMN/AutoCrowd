@@ -69,6 +69,7 @@ contract AICrowdfundingCampaign is Ownable, ReentrancyGuard {
         require(_totalGoal > 0, "Goal must be > 0");
         require(_duration > 0, "Duration must be > 0");
         require(_pyusd != address(0), "Zero address");
+        require(_creator != address(0), "Zero creator");
 
         campaignInfo = CampaignInfo({
             title: _title,
@@ -276,11 +277,11 @@ contract AICrowdfundingCampaign is Ownable, ReentrancyGuard {
     }
 
     /**
-     * @dev Check if address is authorized AI handler (to be implemented based on your AI setup)
+     * @dev Check if address is authorized AI handler
      */
-    function isAiHandler(address /* _addr */) internal pure returns (bool) {
-        // For hackathon: allow any address, in production implement proper access control
-        return true;
+    function isAiHandler(address _addr) internal view returns (bool) {
+        // Check if the address matches the deployed AI Verification Handler
+        return _addr == 0x3b63F27F7b727117454Cc35dB620011f56c29b67;
     }
 
     /**

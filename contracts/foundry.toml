@@ -17,7 +17,7 @@ remappings = ["@openzeppelin/=lib/"]
 
 # RPC Configuration
 [rpc_endpoints]
-sepolia = "https://eth-sepolia.publicnode.com"
+sepolia = "${ETH_RPC_URL}"
 
 [etherscan]
 sepolia = { key = "${ETHERSCAN_API_KEY}" }

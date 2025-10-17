@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {Test, console} from "forge-std/Test.sol";
+import {Test} from "forge-std/Test.sol";
 import {AICrowdfundingCampaign} from "../src/AICrowdfundingCampaign.sol";
-import {StdCheats} from "forge-std/StdCheats.sol";
 
 contract MockERC20 {
     mapping(address => uint256) public balanceOf;
