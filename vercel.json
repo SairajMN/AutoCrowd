@@ -4,7 +4,11 @@
     "installCommand": "npm install",
     "outputDirectory": "frontend/.next",
     "devCommand": "cd frontend && npm run dev",
-    "functions": {},
+    "functions": {
+        "backend/src/index.js": {
+            "runtime": "nodejs20.x"
+        }
+    },
     "regions": [
         "iad1"
     ],
