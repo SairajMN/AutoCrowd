@@ -49,10 +49,11 @@ contract CampaignFactoryTest is Test {
     CampaignFactory factory;
     MockERC20 pyusd;
     address creator = address(1);
+    address mockAiHandler = address(0x42); // Mock AI handler address
 
     function setUp() public {
         pyusd = new MockERC20("PYUSD", "PYUSD", 18);
-        factory = new CampaignFactory(address(pyusd));
+        factory = new CampaignFactory(address(pyusd), mockAiHandler);
     }
 
     function test_Deployment() public view {

@@ -24,7 +24,7 @@ contract DeployScript is Script {
 
         // Deploy Campaign Factory
         console.log("Deploying CampaignFactory...");
-        CampaignFactory factory = new CampaignFactory(pyusdAddress);
+        CampaignFactory factory = new CampaignFactory(pyusdAddress, address(aiHandler));
         console.log("CampaignFactory deployed at:", address(factory));
 
         vm.stopBroadcast();

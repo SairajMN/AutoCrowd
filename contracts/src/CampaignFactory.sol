@@ -9,6 +9,7 @@ import {AICrowdfundingCampaign} from "./AICrowdfundingCampaign.sol";
  */
 contract CampaignFactory {
     address public immutable PYUSD;
+    address public immutable DEFAULT_AI_HANDLER;
 
     struct CampaignData {
         address campaignAddress;
@@ -29,8 +30,9 @@ contract CampaignFactory {
         uint256 duration
     );
 
-    constructor(address _pyusd) {
+    constructor(address _pyusd, address _defaultAiHandler) {
         PYUSD = _pyusd;
+        DEFAULT_AI_HANDLER = _defaultAiHandler;
     }
 
     /**
@@ -90,7 +92,8 @@ contract CampaignFactory {
             _duration,
             PYUSD,
             msg.sender,
-            _milestoneAmounts
+            _milestoneAmounts,
+            DEFAULT_AI_HANDLER
         );
 
         address campaignAddress = address(newCampaign);

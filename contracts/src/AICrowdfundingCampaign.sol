@@ -13,16 +13,13 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 contract AICrowdfundingCampaign is Ownable, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
-    enum MilestoneState { Pending, Submitted, Voting, Approved, Rejected }
+    enum MilestoneState { Pending, Submitted, Approved, Rejected }
     struct Milestone {
         string description;
         uint256 amount;          // PYUSD amount for this milestone
         uint256 deadline;        // Timestamp when milestone should be completed
         MilestoneState state;    // State machine for milestone progress
         uint256 submittedAt;     // When submitted for verification
-        uint256 votingEnd;       // End of voting period if AI uncertain
-        uint256 yesVotes;        // Weighted yes votes (by contribution amount)
-        uint256 noVotes;         // Weighted no votes (by contribution amount)
         string aiReviewHash;     // IPFS hash of submission/evidence
         bool fundsReleased;      // Whether funds have been released
     }
@@ -42,20 +39,18 @@ contract AICrowdfundingCampaign is Ownable, ReentrancyGuard {
     CampaignInfo public campaignInfo;
     mapping(uint256 => Milestone) public milestones;
     mapping(address => uint256) public contributions;
-    mapping(uint256 => mapping(address => bool)) public hasVoted; // milestoneId => voter => hasVoted
     address[] public backers;
     mapping(address => bool) public isBacker;
     IERC20 public pyusd; // PYUSD token contract
+    address public aiHandler; // Address of the AI verification handler
 
-    uint256 public votingPeriod = 3 days; // Configurable voting period for uncertain milestones
 
     event ContributionMade(address indexed contributor, uint256 amount);
     event MilestoneSubmitted(uint256 indexed milestoneId, string reviewHash);
     event MilestoneVerified(uint256 indexed milestoneId, uint8 verdict);
-    event VoteCast(address indexed voter, uint256 indexed milestoneId, bool support);
-    event VotingFinalized(uint256 indexed milestoneId, bool approved);
     event FundsReleased(uint256 indexed milestoneId, uint256 amount);
     event RefundClaimed(address indexed backer, uint256 amount);
+    event AiHandlerUpdated(address indexed previousHandler, address indexed newHandler);
 
     constructor(
         string memory _title,
@@ -64,7 +59,8 @@ contract AICrowdfundingCampaign is Ownable, ReentrancyGuard {
         uint256 _duration,
         address _pyusd,
         address _creator,
-        uint256[] memory _milestoneAmounts
+        uint256[] memory _milestoneAmounts,
+        address _aiHandler
     ) Ownable(_creator) {
         require(_totalGoal > 0, "Goal must be > 0");
         require(_duration > 0, "Duration must be > 0");
@@ -84,6 +80,7 @@ contract AICrowdfundingCampaign is Ownable, ReentrancyGuard {
         });
 
         pyusd = IERC20(_pyusd);
+        aiHandler = _aiHandler;
 
         // Initialize milestones from factory
         uint256 sum = 0;
@@ -95,9 +92,6 @@ contract AICrowdfundingCampaign is Ownable, ReentrancyGuard {
                 deadline: 0,
                 state: MilestoneState.Pending,
                 submittedAt: 0,
-                votingEnd: 0,
-                yesVotes: 0,
-                noVotes: 0,
                 aiReviewHash: "",
                 fundsReleased: false
             });
@@ -150,9 +144,6 @@ contract AICrowdfundingCampaign is Ownable, ReentrancyGuard {
             deadline: _deadline,
             state: MilestoneState.Pending,
             submittedAt: 0,
-            votingEnd: 0,
-            yesVotes: 0,
-            noVotes: 0,
             aiReviewHash: "",
             fundsReleased: false
         });
@@ -180,7 +171,7 @@ contract AICrowdfundingCampaign is Ownable, ReentrancyGuard {
      * @dev AI handler calls this to deliver verdict (verdict: 0=Rejected, 1=Approved, 2=Uncertain)
      */
     function onAiVerdict(uint256 _milestoneId, uint8 _verdict) external {
-        require(msg.sender == owner() || isAiHandler(msg.sender), "Only AI or creator");
+        require(msg.sender == owner() || _isAiHandler(msg.sender), "Only AI or creator");
         require(_milestoneId < campaignInfo.milestoneCount, "Invalid milestone");
 
         Milestone storage m = milestones[_milestoneId];
@@ -190,57 +181,11 @@ contract AICrowdfundingCampaign is Ownable, ReentrancyGuard {
 
         if (_verdict == 1) { // Approved
             _payoutMilestone(_milestoneId);
-        } else if (_verdict == 0) { // Rejected
+        } else if (_verdict == 0 || _verdict == 2) { // Rejected or Uncertain -> treat as rejected
             m.state = MilestoneState.Rejected;
-        } else if (_verdict == 2) { // Uncertain -> start voting
-            m.state = MilestoneState.Voting;
-            m.votingEnd = block.timestamp + votingPeriod;
         } else {
             revert("Invalid verdict");
         }
-    }
-
-    /**
-     * @dev Backers vote on milestones when AI verdict is uncertain
-     */
-    function voteOnMilestone(uint256 _milestoneId, bool _support) external {
-        require(isBacker[msg.sender], "Only backer");
-        require(_milestoneId < campaignInfo.milestoneCount, "Invalid milestone");
-
-        Milestone storage m = milestones[_milestoneId];
-        require(m.state == MilestoneState.Voting, "Not in voting");
-        require(block.timestamp <= m.votingEnd, "Voting ended");
-        require(!hasVoted[_milestoneId][msg.sender], "Already voted");
-
-        hasVoted[_milestoneId][msg.sender] = true;
-        uint256 voteWeight = contributions[msg.sender];
-
-        if (_support) {
-            m.yesVotes += voteWeight;
-        } else {
-            m.noVotes += voteWeight;
-        }
-
-        emit VoteCast(msg.sender, _milestoneId, _support);
-    }
-
-    /**
-     * @dev Finalize voting once voting period ends
-     */
-    function finalizeVoting(uint256 _milestoneId) external nonReentrant {
-        require(_milestoneId < campaignInfo.milestoneCount, "Invalid milestone");
-        Milestone storage m = milestones[_milestoneId];
-        require(m.state == MilestoneState.Voting, "Not in voting");
-        require(block.timestamp > m.votingEnd, "Voting still active");
-
-        bool approved = m.yesVotes > m.noVotes;
-        if (approved) {
-            _payoutMilestone(_milestoneId);
-        } else {
-            m.state = MilestoneState.Rejected;
-        }
-
-        emit VotingFinalized(_milestoneId, approved);
     }
 
     /**
@@ -263,12 +208,10 @@ contract AICrowdfundingCampaign is Ownable, ReentrancyGuard {
      */
     function _payoutMilestone(uint256 _milestoneId) internal {
         Milestone storage m = milestones[_milestoneId];
-        require(m.state == MilestoneState.Submitted ||
-                m.state == MilestoneState.Voting, "Invalid state for payout");
+        require(m.state == MilestoneState.Submitted, "Invalid state for payout");
         require(pyusd.balanceOf(address(this)) >= m.amount, "Insufficient funds in contract");
 
         m.state = MilestoneState.Approved;
-        m.votingEnd = 0; // Reset voting end to indicate completed
         m.fundsReleased = true;
 
         campaignInfo.totalRaised -= m.amount;
@@ -279,9 +222,26 @@ contract AICrowdfundingCampaign is Ownable, ReentrancyGuard {
     /**
      * @dev Check if address is authorized AI handler
      */
-    function isAiHandler(address _addr) internal view returns (bool) {
-        // Check if the address matches the deployed AI Verification Handler
-        return _addr == 0x3b63F27F7b727117454Cc35dB620011f56c29b67;
+    function isAiHandler(address _addr) internal pure returns (bool) {
+        // Overridden below by storage-backed check; keep pure signature for minimal gas when inlined
+        // Placeholder return to satisfy compiler in case of inlining; real check done in _isAiHandler
+        return _addr == address(0);
+    }
+
+    /**
+     * @dev Storage-backed AI handler check
+     */
+    function _isAiHandler(address _addr) internal view returns (bool) {
+        return _addr == aiHandler && _addr != address(0);
+    }
+
+    /**
+     * @dev Set or update the AI handler address (only creator)
+     */
+    function setAiHandler(address _newHandler) external onlyOwner {
+        address previous = aiHandler;
+        aiHandler = _newHandler;
+        emit AiHandlerUpdated(previous, _newHandler);
     }
 
     /**

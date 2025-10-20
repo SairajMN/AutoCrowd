@@ -71,7 +71,8 @@ contract AICrowdfundingCampaignTest is Test {
             30 days, // 30 day duration
             address(pyusd),
             creator,
-            milestoneAmounts
+            milestoneAmounts,
+            aiHandler
         );
     }
 
@@ -146,7 +147,7 @@ contract AICrowdfundingCampaignTest is Test {
         (, , , , , , , , uint256 milestoneCount) = campaign.getCampaignSummary();
         assertEq(milestoneCount, 4);
 
-        (string memory description, uint256 amount, , , , , , , , bool fundsReleased) =
+        (string memory description, uint256 amount, , , , , bool fundsReleased) =
             campaign.milestones(3);
         assertEq(description, "New milestone");
         assertEq(amount, 100);
@@ -159,7 +160,7 @@ contract AICrowdfundingCampaignTest is Test {
         vm.prank(creator);
         campaign.submitMilestone(0, reviewHash);
 
-        (, , , AICrowdfundingCampaign.MilestoneState state, , , , , string memory aiReviewHash, ) =
+        (, , , AICrowdfundingCampaign.MilestoneState state, , string memory aiReviewHash, ) =
             campaign.milestones(0);
         assertEq(uint(state), uint(AICrowdfundingCampaign.MilestoneState.Submitted));
         assertEq(aiReviewHash, reviewHash);
@@ -184,7 +185,7 @@ contract AICrowdfundingCampaignTest is Test {
         vm.prank(creator); // Creator can also trigger AI verdict for testing
         campaign.onAiVerdict(0, 1); // verdict = 1 (approved)
 
-        (, , , AICrowdfundingCampaign.MilestoneState state, , , , , , bool fundsReleased) =
+        (, , , AICrowdfundingCampaign.MilestoneState state, , , bool fundsReleased) =
             campaign.milestones(0);
         assertEq(uint(state), uint(AICrowdfundingCampaign.MilestoneState.Approved));
         assertEq(fundsReleased, true);
@@ -193,39 +194,7 @@ contract AICrowdfundingCampaignTest is Test {
         assertEq(pyusd.balanceOf(creator), 100);
     }
 
-    function test_VoteOnMilestone() public {
-        // Contribute with multiple backers
-        pyusd.mint(backer1, 100);
-        pyusd.mint(backer2, 200);
-
-        vm.startPrank(backer1);
-        pyusd.approve(address(campaign), 100);
-        campaign.contribute(100);
-        vm.stopPrank();
-
-        vm.startPrank(backer2);
-        pyusd.approve(address(campaign), 200);
-        campaign.contribute(200);
-        vm.stopPrank();
-
-        // Submit milestone
-        vm.prank(creator);
-        campaign.submitMilestone(0, "test_hash");
-
-        // AI says uncertain
-        vm.prank(creator);
-        campaign.onAiVerdict(0, 2); // verdict = 2 (uncertain)
-
-        // Start voting (move time forward past voting period start would be needed in real scenario)
-        vm.warp(block.timestamp + campaign.votingPeriod() + 1);
-        vm.prank(creator);
-        campaign.finalizeVoting(0);
-
-        (, , , AICrowdfundingCampaign.MilestoneState state, , , , , , ) =
-            campaign.milestones(0);
-        // Should be rejected since no one voted
-        assertEq(uint(state), uint(AICrowdfundingCampaign.MilestoneState.Rejected));
-    }
+    // Voting test removed: protocol no longer supports voting
 
     function test_ClaimRefund() public {
         // Contribute funds
