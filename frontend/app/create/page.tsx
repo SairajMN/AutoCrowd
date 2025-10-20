@@ -212,7 +212,7 @@ export default function CreateCampaignPage() {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div>
                             <label htmlFor="goal" className="block text-sm font-medium text-gray-700 mb-2">
-                                Funding Goal (ETH) <span className="text-red-500">*</span>
+                                Funding Goal (PYUSD) <span className="text-red-500">*</span>
                             </label>
                             <input
                                 type="number"
@@ -290,7 +290,7 @@ export default function CreateCampaignPage() {
                                             type="number"
                                             value={milestone.amount}
                                             onChange={(e) => updateMilestone(index, 'amount', e.target.value)}
-                                            placeholder="Amount in ETH"
+                                            placeholder="Amount in PYUSD"
                                             step="0.1"
                                             min="0"
                                             className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"

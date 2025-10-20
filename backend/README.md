@@ -51,12 +51,7 @@ AI-powered backend service for AutoCrowd crowdfunding platform, integrating with
    npm install
    ```
 
-2. **Install Python dependencies**
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-3. **Setup environment variables**
+2. **Setup environment variables**
    ```bash
    cp env.example .env
    # Edit .env with your configuration
@@ -88,7 +83,7 @@ CHAIN_ID=11155111
 # Contract Addresses
 CAMPAIGN_FACTORY_ADDRESS=0x...
 AI_VERIFICATION_HANDLER_ADDRESS=0x...
-PYUSD_CONTRACT_ADDRESS=0x6c3ea9036406852006290770BEdFcAb0Df3A8ac0
+PYUSD_CONTRACT_ADDRESS=0xCaC524BcA292aaade2DF8A05cC58F0a65B1B3bB9
 
 # ASI Configuration
 ASI_API_KEY=your_asi_api_key

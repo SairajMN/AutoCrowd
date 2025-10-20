@@ -1,10 +1,10 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { ethers } from 'ethers';
 import { useWeb3 } from '../hooks/useWeb3';
-import { CampaignDetails } from '../lib/contracts';
-import { CampaignActivity } from './CampaignActivity';
+import { CampaignDetails, CAMPAIGN_ABI, PYUSD_ABI, NETWORK_CONFIG } from '../lib/contracts';
+import { formatPYUSDAmount } from '../lib/pyusd';
 
 interface CampaignDetailProps {
     campaignAddress: string;
@@ -13,13 +13,17 @@ interface CampaignDetailProps {
 enum MilestoneState {
     Pending = 0,
     Submitted = 1,
-    Voting = 2,
-    Approved = 3,
-    Rejected = 4
+    Approved = 2,
+    Rejected = 3
 }
 
 export function CampaignDetail({ campaignAddress }: CampaignDetailProps) {
-    const { getCampaignDetails, contribute, isConnected, address, getPYUSDBalance, submitMilestone, voteOnMilestone, finalizeVoting, claimRefund } = useWeb3();
+    const { getCampaignDetails, contribute, isConnected, address, getPYUSDBalance, submitMilestone, claimRefund, isProviderReady } = useWeb3();
+
+    // Helper function for PYUSD formatting using proper utilities
+    const formatPYUSD = (amount: bigint) => {
+        return formatPYUSDAmount(amount, 6);
+    };
 
     const [campaign, setCampaign] = useState<CampaignDetails | null>(null);
     const [loading, setLoading] = useState(true);
@@ -30,21 +34,7 @@ export function CampaignDetail({ campaignAddress }: CampaignDetailProps) {
     const [milestoneReviewHash, setMilestoneReviewHash] = useState('');
     const [selectedMilestone, setSelectedMilestone] = useState<number | null>(null);
 
-    // Load campaign details
-    useEffect(() => {
-        if (campaignAddress) {
-            loadCampaignDetails();
-        }
-    }, [campaignAddress]);
-
-    // Load PYUSD balance
-    useEffect(() => {
-        if (address) {
-            loadPYUSDBalance();
-        }
-    }, [address]);
-
-    const loadCampaignDetails = async () => {
+    const loadCampaignDetails = useCallback(async () => {
         try {
             setLoading(true);
             const details = await getCampaignDetails(campaignAddress);
@@ -55,16 +45,30 @@ export function CampaignDetail({ campaignAddress }: CampaignDetailProps) {
         } finally {
             setLoading(false);
         }
-    };
+    }, [campaignAddress, getCampaignDetails]);
 
-    const loadPYUSDBalance = async () => {
+    const loadPYUSDBalance = useCallback(async () => {
         try {
             const balance = await getPYUSDBalance();
             setPyusdBalance(balance);
         } catch (err) {
             console.error('Failed to load PYUSD balance:', err);
         }
-    };
+    }, [getPYUSDBalance]);
+
+    // Load campaign details
+    useEffect(() => {
+        if (campaignAddress && isProviderReady) {
+            loadCampaignDetails();
+        }
+    }, [campaignAddress, isProviderReady, loadCampaignDetails]);
+
+    // Load PYUSD balance
+    useEffect(() => {
+        if (address && isProviderReady) {
+            loadPYUSDBalance();
+        }
+    }, [address, isProviderReady, loadPYUSDBalance]);
 
     const handleContribute = async () => {
         if (!contributionAmount || !campaign) return;
@@ -100,31 +104,7 @@ export function CampaignDetail({ campaignAddress }: CampaignDetailProps) {
         }
     };
 
-    const handleVote = async (milestoneId: number, support: boolean) => {
-        try {
-            setTransactionLoading(true);
-            await voteOnMilestone(campaignAddress, milestoneId, support);
-            await loadCampaignDetails();
-            alert('Vote submitted successfully!');
-        } catch (err) {
-            alert('Failed to vote: ' + (err instanceof Error ? err.message : 'Unknown error'));
-        } finally {
-            setTransactionLoading(false);
-        }
-    };
-
-    const handleFinalizeVoting = async (milestoneId: number) => {
-        try {
-            setTransactionLoading(true);
-            await finalizeVoting(campaignAddress, milestoneId);
-            await loadCampaignDetails();
-            alert('Voting finalized!');
-        } catch (err) {
-            alert('Failed to finalize voting: ' + (err instanceof Error ? err.message : 'Unknown error'));
-        } finally {
-            setTransactionLoading(false);
-        }
-    };
+    // Voting removed from protocol
 
     const handleClaimRefund = async () => {
         try {
@@ -144,7 +124,6 @@ export function CampaignDetail({ campaignAddress }: CampaignDetailProps) {
         switch (state) {
             case MilestoneState.Pending: return 'Pending';
             case MilestoneState.Submitted: return 'Submitted for AI Review';
-            case MilestoneState.Voting: return 'Community Voting';
             case MilestoneState.Approved: return 'Approved';
             case MilestoneState.Rejected: return 'Rejected';
         }
@@ -154,7 +133,6 @@ export function CampaignDetail({ campaignAddress }: CampaignDetailProps) {
         switch (state) {
             case MilestoneState.Pending: return 'bg-gray-100 text-gray-800';
             case MilestoneState.Submitted: return 'bg-yellow-100 text-yellow-800';
-            case MilestoneState.Voting: return 'bg-blue-100 text-blue-800';
             case MilestoneState.Approved: return 'bg-green-100 text-green-800';
             case MilestoneState.Rejected: return 'bg-red-100 text-red-800';
         }
@@ -209,8 +187,8 @@ export function CampaignDetail({ campaignAddress }: CampaignDetailProps) {
                 {/* Progress */}
                 <div className="mb-4">
                     <div className="flex justify-between text-sm text-gray-600 mb-2">
-                        <span>Raised: {ethers.formatEther(campaign.totalRaised)} PYUSD</span>
-                        <span>Goal: {ethers.formatEther(campaign.totalGoal)} PYUSD</span>
+                        <span>Raised: {formatPYUSD(campaign.totalRaised)} PYUSD</span>
+                        <span>Goal: {formatPYUSD(campaign.totalGoal)} PYUSD</span>
                     </div>
                     <div className="w-full bg-gray-200 rounded-full h-2">
                         <div
@@ -237,7 +215,7 @@ export function CampaignDetail({ campaignAddress }: CampaignDetailProps) {
                                     placeholder="Enter amount"
                                     className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
                                 />
-                                <p className="text-xs text-gray-500 mt-1">Balance: {ethers.formatEther(pyusdBalance)} PYUSD</p>
+                                <p className="text-xs text-gray-500 mt-1">Balance: {formatPYUSD(pyusdBalance)} PYUSD</p>
                             </div>
                             <button
                                 onClick={handleContribute}
@@ -278,7 +256,7 @@ export function CampaignDetail({ campaignAddress }: CampaignDetailProps) {
                                     <span className={`px-2 py-1 rounded text-xs font-medium ${getMilestoneStateColor(milestone.state)}`}>
                                         {getMilestoneStateText(milestone.state)}
                                     </span>
-                                    <p className="text-sm text-gray-500 mt-1">{ethers.formatEther(milestone.amount)} PYUSD</p>
+                                    <p className="text-sm text-gray-500 mt-1">{formatPYUSD(milestone.amount)} PYUSD</p>
                                 </div>
                             </div>
 
@@ -294,43 +272,7 @@ export function CampaignDetail({ campaignAddress }: CampaignDetailProps) {
                                 </div>
                             )}
 
-                            {/* Voting Actions */}
-                            {milestone.state === MilestoneState.Voting && campaign.isBacker && (
-                                <div className="border-t pt-3 mt-3">
-                                    <div className="flex items-center gap-4">
-                                        <button
-                                            onClick={() => handleVote(index, true)}
-                                            disabled={transactionLoading}
-                                            className="px-4 py-2 bg-green-600 text-white text-sm rounded hover:bg-green-700 disabled:opacity-50"
-                                        >
-                                            Approve
-                                        </button>
-                                        <button
-                                            onClick={() => handleVote(index, false)}
-                                            disabled={transactionLoading}
-                                            className="px-4 py-2 bg-red-600 text-white text-sm rounded hover:bg-red-700 disabled:opacity-50"
-                                        >
-                                            Reject
-                                        </button>
-                                    </div>
-                                    <p className="text-xs text-gray-500 mt-2">
-                                        Your voting power: {campaign.userContribution ? ethers.formatEther(campaign.userContribution) : '0'} PYUSD
-                                    </p>
-                                </div>
-                            )}
-
-                            {/* Finalize Voting */}
-                            {milestone.state === MilestoneState.Voting && Date.now() / 1000 > milestone.votingEnd && isCreator && (
-                                <div className="border-t pt-3 mt-3">
-                                    <button
-                                        onClick={() => handleFinalizeVoting(index)}
-                                        disabled={transactionLoading}
-                                        className="px-4 py-2 bg-purple-600 text-white text-sm rounded hover:bg-purple-700 disabled:opacity-50"
-                                    >
-                                        Finalize Voting
-                                    </button>
-                                </div>
-                            )}
+                            {/* Voting removed */}
                         </div>
                     ))}
                 </div>
@@ -375,8 +317,65 @@ export function CampaignDetail({ campaignAddress }: CampaignDetailProps) {
                 </div>
             )}
 
-            {/* Activity */}
-            <CampaignActivity campaignAddress={campaignAddress} campaignTitle={campaign.title} />
+            {/* Debug Panel */}
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6 mb-6">
+                <h2 className="text-2xl font-bold text-gray-900 mb-4">🔧 Debug Panel</h2>
+                <p className="text-gray-600 mb-4">Use this to diagnose contribution issues.</p>
+                <button
+                    onClick={async () => {
+                        console.log('=== Starting Campaign Diagnosis ===');
+                        console.log('Campaign Address:', campaignAddress);
+                        console.log('User Address:', address);
+                        try {
+                            // Check campaign contract code
+                            if (window.ethereum) {
+                                const provider = new ethers.BrowserProvider(window.ethereum);
+                                const code = await provider.getCode(campaignAddress);
+                                console.log('Campaign contract deployed:', code !== '0x');
+                                console.log('Contract code length:', code.length);
+                            }
+
+                            // Get campaign summary
+                            const campaignContract = new ethers.Contract(campaignAddress, CAMPAIGN_ABI, new ethers.JsonRpcProvider(NETWORK_CONFIG.rpcUrl));
+                            const summary = await campaignContract.getCampaignSummary();
+                            console.log('Campaign Summary:', {
+                                title: summary.title,
+                                isActive: summary.isActive,
+                                totalGoal: ethers.formatUnits(summary.totalGoal, 6),
+                                totalRaised: ethers.formatUnits(summary.totalRaised, 6),
+                                endTime: new Date(Number(summary.endTime) * 1000).toISOString()
+                            });
+
+                            // Get PYUSD contract from campaign
+                            const pyusdAddr = await campaignContract.pyusd();
+                            console.log('Campaign PYUSD address:', pyusdAddr);
+
+                            if (address) {
+                                // Check user allowance
+                                const pyusd = new ethers.Contract(pyusdAddr, PYUSD_ABI, new ethers.JsonRpcProvider(NETWORK_CONFIG.rpcUrl));
+                                const allowance = await pyusd.allowance(address, campaignAddress);
+                                const balance = await pyusd.balanceOf(address);
+                                console.log('User PYUSD allowance:', ethers.formatUnits(allowance, 6));
+                                console.log('User PYUSD balance:', ethers.formatUnits(balance, 6));
+                            }
+
+                            alert('Debug information logged to console. Press F12 to view.');
+                        } catch (error) {
+                            console.error('Debug failed:', error);
+                            alert('Debug failed: ' + (error as Error).message);
+                        }
+                    }}
+                    className="px-4 py-2 bg-yellow-600 text-white rounded hover:bg-yellow-700"
+                >
+                    Run Campaign Diagnosis
+                </button>
+            </div>
+
+            {/* Activity - Simplified for now */}
+            <div className="bg-white rounded-lg shadow p-6">
+                <h2 className="text-2xl font-bold text-gray-900 mb-4">Recent Activity</h2>
+                <p className="text-gray-600">Activity tracking will be implemented with enhanced Blockscout integration.</p>
+            </div>
         </div>
     );
 }
