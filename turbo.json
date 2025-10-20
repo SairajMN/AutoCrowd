@@ -1,22 +1,9 @@
 {
     "$schema": "https://turbo.build/schema.json",
-    "ui": "tui",
-    "tasks": {
+    "pipeline": {
         "build": {
             "dependsOn": [
                 "^build"
-            ],
-            "inputs": [
-                "src/**",
-                "tsconfig.json",
-                "package.json",
-                "*.config.**"
-            ],
-            "outputs": [
-                "dist/**",
-                ".next/**",
-                "!.next/cache/**",
-                "build/**"
             ]
         },
         "lint": {},
