@@ -17,6 +17,7 @@
     },
     "devDependencies": {
         "@openzeppelin/contracts": "^5.4.0",
+        "@tailwindcss/typography": "^0.5.19",
         "@typescript-eslint/eslint-plugin": "^6.5.0",
         "@typescript-eslint/parser": "^6.5.0",
         "eslint": "^8.50.0",
