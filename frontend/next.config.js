@@ -10,12 +10,16 @@ const nextConfig = {
         domains: ['blockscout.com'],
     },
     async rewrites() {
-        return [
-            {
-                source: '/api/:path*',
-                destination: 'http://localhost:3001/api/:path*', // Proxy to backend in development
-            },
-        ]
+        // Only proxy API calls in development
+        if (process.env.NODE_ENV === 'development') {
+            return [
+                {
+                    source: '/api/:path*',
+                    destination: 'http://localhost:3001/api/:path*', // Proxy to backend in development
+                },
+            ]
+        }
+        return []
     },
     webpack: (config, { isServer }) => {
         // Ensure problematic native/react-native modules are never bundled
