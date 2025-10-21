@@ -54,10 +54,14 @@ export interface RealTimeUpdate {
 export class BlockscoutClient {
     private baseUrl: string;
     private apiUrl: string;
+    private apiKey?: string;
+    private retryAttempts: number = 3;
+    private timeout: number = 10000;
 
     constructor() {
         this.baseUrl = process.env.NEXT_PUBLIC_BLOCKSCOUT_BASE_URL || 'https://eth-sepolia.blockscout.com';
         this.apiUrl = `${this.baseUrl}/api`;
+        this.apiKey = process.env.NEXT_PUBLIC_BLOCKSCOUT_API_KEY;
     }
 
     /**

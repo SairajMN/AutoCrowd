@@ -1,13 +1,32 @@
 {
-    "functions": {
-        "frontend/app/**": {
-            "runtime": "@vercel/node"
-        }
+  "version": 2,
+  "builds": [
+    {
+      "src": "frontend/package.json",
+      "use": "@vercel/next"
     },
-    "rewrites": [
-        {
-            "source": "/(.*)",
-            "destination": "/frontend"
-        }
-    ]
+    {
+      "src": "backend/src/index.js",
+      "use": "@vercel/node"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/api/(.*)",
+      "dest": "/backend/src/index.js"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/frontend/$1"
+    }
+  ],
+  "env": {
+    "NODE_ENV": "production"
+  },
+  "functions": {
+    "backend/src/index.js": {
+      "maxDuration": 30
+    }
+  },
+  "regions": ["sin1"]
 }

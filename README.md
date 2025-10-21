@@ -1,111 +1,297 @@
-# AutoCrowd
-# On-Chain AI Crowdfunding Platform MVP
+# AutoCrowd - Production-Ready AI-Powered Crowdfunding Platform
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Solidity](https://img.shields.io/badge/Solidity-^0.8.20-blue.svg)](https://soliditylang.org)
-[![Foundry](https://img.shields.io/badge/Foundry-v0.2.0-red.svg)](https://getfoundry.sh)
-[![Next.js](https://img.shields.io/badge/Next.js-14-black.svg)](https://nextjs.org)
-[![Ethereum Sepolia](https://img.shields.io/badge/Network-Sepolia-orange.svg)](https://sepolia.etherscan.io)
+A decentralized crowdfunding platform with AI-powered milestone verification using ASI (Autonomous Software Intelligence) agents.
 
-A cutting-edge **on-chain AI-powered crowdfunding platform** designed for transparency, security, and autonomous milestone verification. Creators launch campaigns funded with PayPal's **PYUSD stablecoin** on Ethereum Sepolia testnet. Milestones are evaluated by **Artificial Superintelligence (ASI) Alliance agents**, with funds released automatically upon AI approval or via backer voting for uncertain cases. All actions are tracked transparently via **Blockscout**, optimized for hackathon prize categories: **Blockscout ($7,000)**, **PayPal ($10,000)**, and **ASI Alliance ($10,000)**.
+## 🚀 Features
 
-## ✅ **Implemented Features**
+- **AI-Powered Verification**: Real-time milestone verification using ASI agents
+- **Blockchain Integration**: Secure smart contracts on Ethereum Sepolia
+- **PYUSD Stablecoin**: US Dollar-pegged stablecoin for contributions
+- **Blockscout Explorer**: Enhanced blockchain exploration capabilities
+- **Production-Ready**: Docker containerization, monitoring, and security hardening
 
-- **✅ Smart Contract Funding**: PYUSD stablecoin integration for transparent, stable funding
-- **✅ AI Milestone Verification**: ASI agents verify milestone completion before releasing funds
-- **✅ Campaign Factory**: Deploy and manage multiple crowdfunding campaigns
-- **✅ Real-time Tracking**: Blockscout explorer integration for transaction transparency
-- **✅ Modern UI**: Next.js 14 + Tailwind CSS with wallet integration
-- **✅ Backend API**: Node.js backend with AI verification service
-- **✅ ASI Integration**: Python agents using ASI Alliance ecosystem
-- **✅ Event Processing**: Automated milestone verification workflow
-
-
-## 🎯 Project Overview
-
-This MVP delivers a **functional end-to-end demo** combining blockchain, AI, and user-friendly UI. Key features include:
-- **PYUSD Crowdfunding**: Backers fund campaigns using PayPal’s stablecoin with gas-efficient ERC20 transfers.
-- **AI-Driven Milestone Verification**: ASI agents analyze milestone proofs (e.g., URLs/text) using uAgents and MeTTa knowledge graphs.
-- **Fallback Voting**: Backers vote (weighted by contribution) if AI verdicts are uncertain.
-- **Blockscout Transparency**: Real-time transaction and event tracking via custom explorer and SDK.
-- **Wallet-Agnostic UI**: Supports MetaMask, WalletConnect, Coinbase Wallet, and more via Wagmi.
-- **Prize Optimization**: Tailored for Blockscout, PayPal, and ASI Alliance criteria with on-chain events, AI integration, and seamless UX.
-
-### Workflow Diagram (ASCII)
+## 🏗️ Architecture
 
 ```
-USER JOURNEY:
-1. Creator ───Factory───→ New Campaign (Set PYUSD goal + milestones)
-   │
-2. Backers ──PYUSD──→ Fund Campaign (Approve & transfer via wallet)
-   │
-3. Creator ──Submit──→ Milestone Proof (URL/text)
-   │
-4. Contract ──Event──→ AI Backend Listener (uAgents via Web3.py)
-   │
-5. ASI Agent ──Analysis──→ On-chain Verdict (MeTTa reasoning + ASI:One)
-   │
-6. IF Approved ──Auto-release──→ Funds to Creator
-   │
-7. IF Uncertain ──Trigger──→ Backer Voting (Weighted by contribution)
-   │
-8. ALL Actions ──Blockscout──→ Transparent Tracking (SDK in UI)
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   Frontend      │    │   Backend       │    │   Blockchain    │
+│   (Next.js)     │◄──►│   (Node.js)     │◄──►│   (Ethereum)    │
+│                 │    │                 │    │                 │
+│ - React UI      │    │ - AI Verification│    │ - Smart        │
+│ - Web3 Wallet   │    │ - REST API      │    │   Contracts     │
+│ - Blockscout    │    │ - Rate Limiting │    │ - PYUSD Token   │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+                              │                        │
+                              ▼                        ▼
+                       ┌─────────────────┐    ┌─────────────────┐
+                       │   Database      │    │   Blockscout    │
+                       │   (PostgreSQL)  │    │   Explorer      │
+                       └─────────────────┘    └─────────────────┘
+                              │
+                              ▼
+                       ┌─────────────────┐
+                       │   Cache         │
+                       │   (Redis)       │
+                       └─────────────────┘
 ```
 
-## 🏗️ Technical Stack
+## 🛠️ Tech Stack
 
-| Layer | Technologies |
-|-------|--------------|
-| **Blockchain** | Solidity 0.8.20, Foundry, OpenZeppelin, Ethereum Sepolia Testnet, PYUSD ERC20 |
-| **AI Integration** | ASI Alliance (uAgents, Agentverse, MeTTa Knowledge Graphs, ASI:One Chat Protocol) |
-| **Backend** | Node.js, Express, Python, ASI Agents, Event Processing |
-| **Transparency** | Blockscout Autoscout Explorer, Blockscout SDK, Real-time Event Tracking |
-| **Frontend** | Next.js 14 (TypeScript), Wagmi, Ethers.js, WalletConnect v2, Tailwind CSS |
-| **Testing/Dev** | Forge tests, Web3.py for agents, Jest, Comprehensive Testing Suite |
+### Frontend
+- **Next.js 14** - React framework with App Router
+- **TypeScript** - Type-safe JavaScript
+- **Tailwind CSS** - Utility-first CSS framework
+- **Wagmi** - React hooks for Ethereum
+- **RainbowKit** - Wallet connection library
+
+### Backend
+- **Node.js 18** - JavaScript runtime
+- **Express.js** - Web framework
+- **PostgreSQL** - Primary database
+- **Redis** - Caching and session store
+- **Winston** - Logging framework
+
+### Blockchain
+- **Solidity** - Smart contract language
+- **Foundry** - Development framework
+- **Ethers.js** - Ethereum library
+- **PYUSD** - PayPal USD stablecoin
+
+### AI & Verification
+- **ASI Agents** - Real Autonomous Software Intelligence (Production Mode)
+- **MeTTa Knowledge Graph** - Advanced AI reasoning engine
+- **AgentVerse** - Multi-agent coordination platform
+
+### DevOps & Monitoring
+- **Docker** - Containerization
+- **Nginx** - Reverse proxy and load balancer
+- **Prometheus** - Metrics collection
+- **Grafana** - Monitoring dashboard
 
 ## 🚀 Quick Start
 
 ### Prerequisites
-- Node.js 18+
-- Python 3.8+
+- Node.js 18+ (for local development)
 - Git
-- Foundry (for contract development)
 
-### Setup
+### Option 1: FREE Vercel Deployment (Recommended)
 
-1. **Clone and setup**
+1. **Clone the repository**
    ```bash
-   git clone <repository-url>
+   git clone https://github.com/SairajMN/AutoCrowd.git
    cd AutoCrowd
-   
-   # Windows
-   setup.bat
-   
-   # Linux/Mac
-   chmod +x setup.sh && ./setup.sh
    ```
 
-2. **Configure environment**
+2. **Run the automated setup script**
+   ```bash
+   ./setup-free-services.sh
+   ```
+   This script will:
+   - Set up Supabase (Free PostgreSQL)
+   - Configure Upstash Redis (Free)
+   - Deploy to Vercel automatically
+   - Configure all environment variables
+
+3. **Manual Setup (if script doesn't work)**
+   ```bash
+   # Install Vercel CLI
+   npm install -g vercel
+
+   # Login to Vercel
+   vercel login
+
+   # Deploy
+   vercel --prod
+   ```
+
+### Option 2: Local Development
+
+1. **Install dependencies**
+   ```bash
+   # Backend
+   cd backend && npm install
+
+   # Frontend
+   cd ../frontend && npm install
+   ```
+
+2. **Configure environment variables**
    ```bash
    # Copy and edit environment files
-   cp env.example .env
-   cp frontend/env.example frontend/.env.local
-   cp backend/env.example backend/.env
-   cp contracts/env.example contracts/.env
+   cp backend/.env.example backend/.env
+   cp frontend/.env.local.example frontend/.env.local
    ```
 
-3. **Deploy contracts**
+3. **Start development servers**
    ```bash
-   npm run deploy:contracts
+   # Backend (Terminal 1)
+   cd backend && npm run dev
+
+   # Frontend (Terminal 2)
+   cd frontend && npm run dev
    ```
 
-4. **Start development servers**
+### Option 3: Docker Deployment
+
+1. **Deploy with Docker Compose**
    ```bash
-   # Start all services
-   npm run dev
-   
-   # Or start individually
-   cd frontend && npm run dev    # Frontend on :3000
-   cd backend && npm run dev     # Backend on :8000
-   python backend/src/agents/milestone_verifier.py  # AI Agent
+   docker-compose up -d
    ```
+
+2. **Verify deployment**
+   ```bash
+   curl http://localhost/health
+   ```
+
+### Local Development
+
+1. **Install dependencies**
+   ```bash
+   # Install backend dependencies
+   cd backend && npm install
+
+   # Install frontend dependencies
+   cd ../frontend && npm install
+
+   # Install contracts dependencies
+   cd ../contracts && npm install
+   ```
+
+2. **Start development servers**
+   ```bash
+   # Terminal 1: Backend
+   cd backend && npm run dev
+
+   # Terminal 2: Frontend
+   cd frontend && npm run dev
+
+   # Terminal 3: Contracts (optional)
+   cd contracts && npm run dev
+   ```
+
+## 🔧 Configuration
+
+### Environment Variables
+
+#### Backend (.env)
+```env
+# Server
+PORT=8000
+NODE_ENV=production
+
+# Blockchain
+ETH_RPC_URL=https://eth-sepolia.g.alchemy.com/v2/YOUR_RPC_KEY
+PRIVATE_KEY=YOUR_PRIVATE_KEY
+CHAIN_ID=11155111
+
+# AI/ASI
+ASI_API_KEY=YOUR_ASI_API_KEY
+METTA_KNOWLEDGE_GRAPH_URL=https://metta.asi.one
+AGENT_VERSE_URL=https://agentverse.asi.one
+
+# Database
+DATABASE_URL=postgresql://user:password@db-host:5432/autocrowd
+REDIS_URL=redis://redis-host:6379
+
+# Security
+JWT_SECRET=YOUR_JWT_SECRET
+ENCRYPTION_KEY=YOUR_ENCRYPTION_KEY
+
+# Monitoring
+SENTRY_DSN=YOUR_SENTRY_DSN
+```
+
+#### Frontend (.env.local)
+```env
+NEXT_PUBLIC_CHAIN_ID=11155111
+NEXT_PUBLIC_RPC_URL=https://eth-sepolia.g.alchemy.com/v2/YOUR_RPC_KEY
+NEXT_PUBLIC_BLOCK_EXPLORER=https://eth-sepolia.blockscout.com
+NEXT_PUBLIC_API_URL=https://your-api-domain.com
+NEXT_PUBLIC_SENTRY_DSN=YOUR_SENTRY_DSN
+```
+
+## 🔒 Security Features
+
+- **Rate Limiting**: API rate limiting with Redis
+- **CORS**: Configured CORS policies
+- **Helmet**: Security headers middleware
+- **Input Validation**: Joi schema validation
+- **HTTPS**: SSL/TLS encryption
+- **Container Security**: Non-root user execution
+
+## 📊 Monitoring & Observability
+
+### Health Checks
+- Application health endpoints
+- Database connectivity checks
+- Blockchain node connectivity
+- AI service availability
+
+### Metrics
+- Prometheus metrics collection
+- Grafana dashboards
+- Error tracking with Sentry
+- Performance monitoring
+
+### Logging
+- Structured JSON logging
+- Log levels (error, warn, info, debug)
+- Log aggregation and analysis
+
+## 🧪 Testing
+
+```bash
+# Run backend tests
+cd backend && npm test
+
+# Run contract tests
+cd contracts && npm test
+
+# Run frontend tests
+cd frontend && npm run test
+```
+
+## 📦 Deployment Options
+
+### Docker Compose (Recommended)
+```bash
+docker-compose up -d
+```
+
+### Kubernetes
+```bash
+kubectl apply -f k8s/
+```
+
+### Cloud Platforms
+- **AWS**: ECS, EKS, or Elastic Beanstalk
+- **Google Cloud**: Cloud Run or GKE
+- **Azure**: Container Instances or AKS
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Add tests
+5. Submit a pull request
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🆘 Support
+
+- **Documentation**: [docs/](docs/)
+- **Issues**: [GitHub Issues](https://github.com/SairajMN/AutoCrowd/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/SairajMN/AutoCrowd/discussions)
+
+## 🔗 Links
+
+- **Live Demo**: [https://auto-crowd-frontend.vercel.app](https://auto-crowd-frontend.vercel.app)
+- **API Documentation**: [https://auto-crowd-frontend.vercel.app/api](https://auto-crowd-frontend.vercel.app/api)
+- **Blockscout Explorer**: [https://eth-sepolia.blockscout.com](https://eth-sepolia.blockscout.com)
+
+---
+
+Built with ❤️ using cutting-edge AI and blockchain technology.
