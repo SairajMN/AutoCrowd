@@ -262,18 +262,43 @@ class BlockchainService {
             return;
         }
 
-        // Listen for new campaigns
-        this.campaignFactoryContract.on('CampaignCreated', (campaignAddress, creator, title, goal, duration) => {
-            logger.info('New campaign created:', {
-                campaignAddress,
-                creator,
-                title,
-                goal: goal.toString(),
-                duration: duration.toString()
+        try {
+            // Listen for new campaigns
+            this.campaignFactoryContract.on('CampaignCreated', (campaignAddress, creator, title, goal, duration) => {
+                logger.info('New campaign created:', {
+                    campaignAddress,
+                    creator,
+                    title,
+                    goal: goal.toString(),
+                    duration: duration.toString()
+                });
             });
-        });
 
-        logger.info('Started listening for blockchain events');
+            // Listen for AI verification events
+            if (this.aiVerificationHandlerContract) {
+                this.aiVerificationHandlerContract.on('VerificationRequested', (requestId, campaign, milestoneId, requester) => {
+                    logger.info('Verification requested:', {
+                        requestId,
+                        campaign,
+                        milestoneId: milestoneId.toString(),
+                        requester
+                    });
+                });
+
+                this.aiVerificationHandlerContract.on('VerificationCompleted', (requestId, approved, aiReportHash) => {
+                    logger.info('Verification completed:', {
+                        requestId,
+                        approved,
+                        aiReportHash
+                    });
+                });
+            }
+
+            logger.info('Started listening for blockchain events');
+        } catch (error) {
+            logger.error('Failed to set up event listeners:', error);
+            throw error;
+        }
     }
 
     /**

@@ -18,6 +18,7 @@ class AIVerificationService {
     this.agentVerseUrl = process.env.AGENT_VERSE_URL || 'https://agentverse.asi.one';
     this.confidenceThreshold = parseFloat(process.env.CONFIDENCE_THRESHOLD) || 0.8;
     this.maxRetryAttempts = parseInt(process.env.MAX_RETRY_ATTEMPTS) || 3;
+    this.verificationTimeout = parseInt(process.env.VERIFICATION_TIMEOUT) || 120000; // 2 minutes
   }
 
   async initialize() {

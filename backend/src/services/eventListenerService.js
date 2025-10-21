@@ -24,15 +24,26 @@ class EventListenerService {
             logger.info('Starting Event Listener Service...');
 
             this.isRunning = true;
-            this.lastProcessedBlock = await blockchainService.getBlockNumber();
 
-            // Start processing events every 30 seconds
+            // Try to get current block number, but don't fail if RPC doesn't support it
+            try {
+                this.lastProcessedBlock = await blockchainService.getBlockNumber();
+            } catch (error) {
+                logger.warn('Could not get current block number, using Blockscout API for event polling');
+                this.lastProcessedBlock = 0;
+            }
+
+            // Start processing events every 60 seconds to respect Alchemy free tier limits
             this.processingInterval = setInterval(async () => {
                 await this.processEvents();
-            }, 30000);
+            }, 60000);
 
-            // Listen for real-time events
-            await blockchainService.listenForEvents();
+            // Listen for real-time events (only if supported by RPC)
+            try {
+                await blockchainService.listenForEvents();
+            } catch (error) {
+                logger.warn('Real-time event listening not supported by current RPC, using polling mode');
+            }
 
             logger.info('Event Listener Service started successfully');
         } catch (error) {
