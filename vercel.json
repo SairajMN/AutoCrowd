@@ -1,16 +1,13 @@
 {
-    "framework": null,
-    "buildCommand": "cd frontend && npm run build",
-    "installCommand": "npm install",
-    "outputDirectory": "frontend/.next",
-    "devCommand": "cd frontend && npm run dev",
     "functions": {
-        "backend/src/index.js": {
-            "runtime": "nodejs20.x"
+        "frontend/app/**": {
+            "runtime": "@vercel/node"
         }
     },
-    "regions": [
-        "iad1"
-    ],
-    "ignoreCommand": "git diff --quiet HEAD^ HEAD -- contracts/ backend/ node_modules/"
+    "rewrites": [
+        {
+            "source": "/(.*)",
+            "destination": "/frontend"
+        }
+    ]
 }

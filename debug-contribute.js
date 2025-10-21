@@ -1,4 +1,4 @@
-const { debugContributeIssue } = require('./frontend/lib/debug.ts');
+const { debugContributeIssue } = require('./frontend/lib/debug');
 
 async function runDiagnosis() {
     // Data from the error report
