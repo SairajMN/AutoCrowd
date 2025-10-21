@@ -9,7 +9,12 @@ export const config = createConfig({
     ],
     transports: {
         // Use explicit RPC to avoid browser-blocked default endpoints
-        [sepolia.id]: http(process.env.NEXT_PUBLIC_RPC_URL || 'https://sepolia.drpc.org'),
+        [sepolia.id]: http(process.env.NEXT_PUBLIC_RPC_URL || 'https://eth-sepolia.g.alchemy.com/v2/ltQPtfSZ7mLXfOOk_drsl', {
+            batch: {
+                batchSize: 1,
+                wait: 0,
+            },
+        }),
     },
     ssr: true,
 })

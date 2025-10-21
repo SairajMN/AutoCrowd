@@ -26,7 +26,10 @@ export function useWeb3() {
             const provider = new ethers.JsonRpcProvider(
                 NETWORK_CONFIG.rpcUrl,
                 { chainId: NETWORK_CONFIG.chainId, name: NETWORK_CONFIG.name },
-                { batchMaxCount: 3 }
+                {
+                    batchMaxCount: 1,
+                    staticNetwork: ethers.Network.from(NETWORK_CONFIG.chainId)
+                }
             );
             setReadOnlyProvider(provider);
         } catch (error) {
@@ -143,8 +146,9 @@ export function useWeb3() {
         if (!contract) throw new Error('Contract not initialized');
 
         try {
-            const campaigns = await contract.getAllCampaigns();
-            return campaigns.map((c: any) => ({
+            // Use paginated endpoint to avoid large responses and batch issues
+            const page = await (contract as any).getCampaignsPaginated(0, 50);
+            return page.map((c: any) => ({
                 campaignAddress: c.campaignAddress,
                 creator: c.creator,
                 title: c.title,
@@ -153,24 +157,12 @@ export function useWeb3() {
             }));
         } catch (error) {
             console.error('Failed to get campaigns:', error);
-            // Fallback: try paginated endpoint to avoid large response or batch issues
-            try {
-                const page = await (contract as any).getCampaignsPaginated(0, 50);
-                return page.map((c: any) => ({
-                    campaignAddress: c.campaignAddress,
-                    creator: c.creator,
-                    title: c.title,
-                    createdAt: Number(c.createdAt),
-                    isActive: c.isActive
-                }));
-            } catch (e) {
-                // Return empty array instead of throwing to prevent UI crashes for provider hiccups
-                if (error instanceof Error && error.message.includes('Failed to fetch')) {
-                    console.warn('Network connection failed, returning empty campaigns list');
-                    return [];
-                }
-                throw e;
+            // Return empty array instead of throwing to prevent UI crashes for provider hiccups
+            if (error instanceof Error && error.message.includes('Failed to fetch')) {
+                console.warn('Network connection failed, returning empty campaigns list');
+                return [];
             }
+            throw error;
         }
     }, [getCampaignFactoryContract]);
 
@@ -315,20 +307,78 @@ export function useWeb3() {
             // Only approve if allowance is insufficient
             if (currentAllowance < amountWei) {
                 console.log('Approving PYUSD for campaign...');
-                const approveTx = await pyusdContract.approve(campaignAddress, amountWei, {
-                    gasLimit: 100000 // Ensure sufficient gas for approval
-                });
-                const approveReceipt = await approveTx.wait();
-                console.log('Approval confirmed in block:', approveReceipt.blockNumber);
+
+                // Estimate gas for approval with retry logic
+                let approveGasEstimate;
+                try {
+                    approveGasEstimate = await pyusdContract.approve.estimateGas(campaignAddress, amountWei, {
+                        from: address
+                    });
+                    console.log('Approval gas estimate:', approveGasEstimate.toString());
+                } catch (estError: any) {
+                    console.warn('Approval gas estimation failed:', estError.message);
+                    approveGasEstimate = 200000n; // Higher fallback for PYUSD approval
+                }
+
+                // Try approval with retry logic
+                let approveTx;
+                let approveReceipt;
+                let approvalRetries = 3;
+
+                while (approvalRetries > 0) {
+                    try {
+                        approveTx = await pyusdContract.approve(campaignAddress, amountWei, {
+                            gasLimit: approveGasEstimate * 150n / 100n // Increase buffer to 50%
+                        });
+
+                        console.log('Approval transaction sent:', approveTx.hash);
+
+                        // Wait for confirmation with shorter timeout for approval
+                        approveReceipt = await Promise.race([
+                            approveTx.wait(),
+                            new Promise((_, reject) =>
+                                setTimeout(() => reject(new Error('Approval confirmation timeout')), 30000) // 30 second timeout
+                            )
+                        ]);
+                        console.log('Approval confirmed in block:', approveReceipt.blockNumber);
+                        break; // Success, exit retry loop
+                    } catch (approveError: any) {
+                        approvalRetries--;
+                        console.warn(`Approval attempt failed (${4 - approvalRetries}/3):`, approveError.message);
+
+                        if (approvalRetries === 0) {
+                            throw new Error(`Approval failed after 3 attempts: ${approveError.message}`);
+                        }
+
+                        // Wait before retry
+                        await new Promise(resolve => setTimeout(resolve, 2000));
+                    }
+                }
 
                 // Add a small delay to ensure the approval is processed
-                await new Promise(resolve => setTimeout(resolve, 2000));
+                await new Promise(resolve => setTimeout(resolve, 3000));
 
-                // Verify the allowance was set
-                const newAllowance = await pyusdContract.allowance(address, campaignAddress);
-                if (newAllowance < amountWei) {
-                    throw new Error(`Allowance verification failed. Expected: ${amountWei.toString()}, Got: ${newAllowance.toString()}`);
+                // Verify the allowance was set with retry
+                let newAllowance;
+                let retries = 3;
+                while (retries > 0) {
+                    try {
+                        newAllowance = await pyusdContract.allowance(address, campaignAddress);
+                        if (newAllowance >= amountWei) break;
+                        console.log(`Allowance verification attempt ${4 - retries}/3: ${ethers.formatUnits(newAllowance, 6)} PYUSD`);
+                        await new Promise(resolve => setTimeout(resolve, 1000));
+                        retries--;
+                    } catch (verifyError) {
+                        console.warn('Allowance verification failed:', verifyError);
+                        retries--;
+                        if (retries > 0) await new Promise(resolve => setTimeout(resolve, 1000));
+                    }
                 }
+
+                if (!newAllowance || newAllowance < amountWei) {
+                    throw new Error(`Allowance verification failed after retries. Expected: ${ethers.formatUnits(amountWei, 6)} PYUSD, Got: ${newAllowance ? ethers.formatUnits(newAllowance, 6) : 'unknown'} PYUSD`);
+                }
+                console.log('Allowance verified successfully');
             } else {
                 console.log('Sufficient allowance already exists');
             }
@@ -354,8 +404,25 @@ export function useWeb3() {
             });
 
             console.log('Contribute transaction sent:', contributeTx.hash);
-            const contributeReceipt = await contributeTx.wait();
-            console.log('Contribute confirmed in block:', contributeReceipt.blockNumber);
+
+            // Wait for confirmation with timeout
+            let contributeReceipt;
+            try {
+                contributeReceipt = await Promise.race([
+                    contributeTx.wait(),
+                    new Promise((_, reject) =>
+                        setTimeout(() => reject(new Error('Transaction confirmation timeout')), 60000) // 60 second timeout
+                    )
+                ]);
+                console.log('Contribute confirmed in block:', contributeReceipt.blockNumber);
+            } catch (waitError: any) {
+                if (waitError.message.includes('timeout')) {
+                    console.warn('Transaction confirmation timed out, but it may still succeed. Check block explorer for status.');
+                    // Don't throw here, as the transaction might still be processing
+                    throw new Error('Transaction sent but confirmation timed out. Please check your wallet and block explorer for transaction status.');
+                }
+                throw waitError;
+            }
 
         } catch (error: any) {
             console.error('Failed to contribute:', error);
