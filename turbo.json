@@ -1,7 +1,15 @@
 {
     "$schema": "https://turbo.build/schema.json",
     "pipeline": {
-        "build": {},
+        "build": {
+            "dependsOn": []
+        },
+        "build:frontend": {
+            "dependsOn": []
+        },
+        "build:backend": {
+            "dependsOn": []
+        },
         "lint": {},
         "test": {
             "dependsOn": [
