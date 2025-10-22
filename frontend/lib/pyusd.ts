@@ -73,9 +73,8 @@ export async function validatePYUSDBalance(
     const required = requiredAmount || 0n;
 
     try {
-        // Import the blockscout client to check balance
+        // Try client-side Blockscout call first
         const { blockscoutClient } = await import('./blockscout');
-
         const balance = await blockscoutClient.getTokenBalance(config.tokenAddress, walletAddress);
 
         if (!balance) {
@@ -100,15 +99,40 @@ export async function validatePYUSDBalance(
             faucetUrl: config.faucetUrl
         };
     } catch (error) {
-        console.error('Error validating PYUSD balance:', error);
-        // Return conservative result on error
-        return {
-            hasBalance: false,
-            currentBalance: 0n,
-            requiredAmount: required,
-            needsFaucet: required > 0n,
-            faucetUrl: config.faucetUrl
-        };
+        console.error('Client-side balance validation failed, trying server-side:', error);
+
+        // Fallback to server-side API if client-side fails due to CORS
+        try {
+            const response = await fetch('/api/pyusd/balance', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    walletAddress,
+                    chainId,
+                    requiredAmount: required.toString()
+                }),
+            });
+
+            if (!response.ok) {
+                throw new Error(`Server API error: ${response.status}`);
+            }
+
+            const data = await response.json();
+            console.log('Successfully fetched PYUSD balance via server API');
+            return data;
+        } catch (serverError) {
+            console.error('Server-side fallback also failed:', serverError);
+            // Return conservative result on error
+            return {
+                hasBalance: false,
+                currentBalance: 0n,
+                requiredAmount: required,
+                needsFaucet: required > 0n,
+                faucetUrl: config.faucetUrl
+            };
+        }
     }
 }
 

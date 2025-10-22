@@ -157,6 +157,7 @@ export function useWeb3() {
 
     // Contract read functions
     const getAllCampaigns = useCallback(async (): Promise<CampaignData[]> => {
+        // Try client-side call first
         const contract = getCampaignFactoryContract();
         if (!contract) throw new Error('Contract not initialized');
 
@@ -171,13 +172,30 @@ export function useWeb3() {
                 isActive: c.isActive
             }));
         } catch (error) {
-            console.error('Failed to get campaigns:', error);
-            // Return empty array instead of throwing to prevent UI crashes for provider hiccups
-            if (error instanceof Error && error.message.includes('Failed to fetch')) {
+            console.error('Client-side call failed for campaigns, trying server-side:', error);
+
+            // Fallback to server-side API if client-side fails due to CORS or network issues
+            try {
+                const response = await fetch('/api/campaigns', {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Server API error: ${response.status}`);
+                }
+
+                const data = await response.json();
+                console.log('Successfully fetched campaigns via server API');
+                return data.campaigns || [];
+            } catch (serverError) {
+                console.error('Server-side fallback also failed:', serverError);
+                // Return empty array instead of throwing to prevent UI crashes
                 console.warn('Network connection failed, returning empty campaigns list');
                 return [];
             }
-            throw error;
         }
     }, [getCampaignFactoryContract]);
 
