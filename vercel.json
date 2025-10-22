@@ -1,12 +1,8 @@
 {
   "version": 2,
-  "rootDirectory": "frontend",
-  "builds": [
-    {
-      "src": "package.json",
-      "use": "@vercel/next"
-    }
-  ],
+  "framework": null,
+  "buildCommand": "npm run build --filter=frontend",
+  "installCommand": "npm install",
   "env": {
     "NODE_ENV": "production"
   },
