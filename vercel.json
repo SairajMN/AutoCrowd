@@ -1,13 +1,1 @@
-{
-  "version": 2,
-  "framework": "nextjs",
-  "rootDirectory": "frontend",
-  "outputDirectory": ".next",
-  "installCommand": "npm install",
-  "env": {
-    "NODE_ENV": "production"
-  },
-  "regions": [
-    "sin1"
-  ]
-}
+{}
