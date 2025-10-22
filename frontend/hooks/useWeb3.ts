@@ -126,19 +126,34 @@ export function useWeb3() {
                 console.log('Environment PYUSD address:', CONTRACT_ADDRESSES.PYUSD);
                 if (addr && addr !== ethers.ZeroAddress) {
                     try {
-                        const code = await (ethersProvider ?? readOnlyProvider)!.getCode(addr);
-                        if (code && code !== '0x') {
-                            setResolvedPyusdAddress(addr);
+                        const provider = ethersProvider ?? readOnlyProvider;
+                        if (provider) {
+                            const code = await provider.getCode(addr);
+                            if (code && code !== '0x') {
+                                setResolvedPyusdAddress(addr);
+                            } else {
+                                console.log('PYUSD contract not deployed at resolved address, using env fallback');
+                            }
+                        } else {
+                            console.log('No provider available, skipping PYUSD contract code check');
                         }
-                    } catch { }
+                    } catch (codeError) {
+                        console.log('Failed to check PYUSD contract deployment:', codeError);
+                    }
+                } else {
+                    console.log('Invalid PYUSD address resolved from factory, using env fallback');
                 }
             } catch (e) {
                 console.log('Failed to resolve PYUSD from factory, using env fallback');
                 // keep env fallback
             }
         };
-        resolve();
-    }, [getCampaignFactoryContract]);
+
+        // Only resolve if providers are ready
+        if (readOnlyProvider) {
+            resolve();
+        }
+    }, [getCampaignFactoryContract, readOnlyProvider, ethersProvider]);
 
     // Contract read functions
     const getAllCampaigns = useCallback(async (): Promise<CampaignData[]> => {
