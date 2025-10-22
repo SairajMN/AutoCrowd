@@ -1,6 +1,9 @@
 'use client';
 
 import Link from 'next/link'
+
+// Force dynamic rendering to avoid SSR issues with Wagmi
+export const dynamic = 'force-dynamic'
 import { useEffect, useState } from 'react'
 import { WalletConnect } from '../../components/WalletConnect'
 import { CampaignCard } from '../../components/CampaignCard'

@@ -1,6 +1,9 @@
 import React from 'react';
 import { CampaignDetail } from '../../../components/CampaignDetail';
 
+// Force dynamic rendering to avoid SSR issues with Wagmi
+export const dynamic = 'force-dynamic'
+
 interface PageProps {
     params: {
         address: string;
