@@ -3,8 +3,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { ethers } from 'ethers';
 import { useWeb3 } from '../hooks/useWeb3';
+import { useBlockscout } from '../hooks/useBlockscout';
+import { useAIVerification } from '../hooks/useAIVerification';
 import { CampaignDetails, CAMPAIGN_ABI, PYUSD_ABI, NETWORK_CONFIG } from '../lib/contracts';
 import { formatPYUSDAmount } from '../lib/pyusd';
+import MilestoneChat from './MilestoneChat';
 
 interface CampaignDetailProps {
     campaignAddress: string;
@@ -19,6 +22,8 @@ enum MilestoneState {
 
 export function CampaignDetail({ campaignAddress }: CampaignDetailProps) {
     const { getCampaignDetails, contribute, isConnected, address, getPYUSDBalance, submitMilestone, claimRefund, isProviderReady } = useWeb3();
+    const { activity: blockscoutActivity, analytics: blockscoutAnalytics, isLoading: blockscoutLoading } = useBlockscout(campaignAddress);
+    const { requestVerification, isVerifying } = useAIVerification();
 
     // Helper function for PYUSD formatting using proper utilities
     const formatPYUSD = (amount: bigint) => {
@@ -263,16 +268,73 @@ export function CampaignDetail({ campaignAddress }: CampaignDetailProps) {
                             {/* Creator Actions */}
                             {isCreator && milestone.state === MilestoneState.Pending && (
                                 <div className="border-t pt-3 mt-3">
-                                    <button
-                                        onClick={() => setSelectedMilestone(index)}
-                                        className="px-4 py-2 bg-green-600 text-white text-sm rounded hover:bg-green-700"
-                                    >
-                                        Submit Milestone
-                                    </button>
+                                    <div className="flex gap-2">
+                                        <button
+                                            onClick={() => setSelectedMilestone(index)}
+                                            className="px-4 py-2 bg-green-600 text-white text-sm rounded hover:bg-green-700"
+                                        >
+                                            Submit Milestone
+                                        </button>
+                                        <button
+                                            onClick={async () => {
+                                                if (!milestone.evidenceHash) return;
+                                                try {
+                                                    const result = await requestVerification({
+                                                        milestoneId: index.toString(),
+                                                        campaignAddress: campaignAddress,
+                                                        description: milestone.description,
+                                                        evidenceHash: milestone.evidenceHash || ''
+                                                    });
+                                                    if (result) {
+                                                        alert(`AI Verification: ${result.verdict} (${Math.round(result.confidence * 100)}% confidence)`);
+                                                        await loadCampaignDetails(); // Refresh data
+                                                    }
+                                                } catch (error) {
+                                                    alert('AI verification failed: ' + (error as Error).message);
+                                                }
+                                            }}
+                                            disabled={isVerifying || !milestone.evidenceHash}
+                                            className="px-4 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 disabled:opacity-50"
+                                        >
+                                            {isVerifying ? 'Verifying...' : 'AI Verify'}
+                                        </button>
+                                    </div>
                                 </div>
                             )}
 
-                            {/* Voting removed */}
+                            {/* AI Confidence Display */}
+                            {milestone.state === MilestoneState.Submitted && milestone.confidence !== undefined && (
+                                <div className="border-t pt-3 mt-3">
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-sm font-medium">AI Confidence:</span>
+                                        <span className={`px-2 py-1 rounded text-xs font-medium ${milestone.confidence > 0.8 ? 'bg-green-100 text-green-800' :
+                                            milestone.confidence > 0.6 ? 'bg-yellow-100 text-yellow-800' :
+                                                'bg-red-100 text-red-800'
+                                            }`}>
+                                            {Math.round(milestone.confidence * 100)}%
+                                        </span>
+                                    </div>
+                                    {milestone.reasoning && (
+                                        <p className="text-sm text-gray-600 mt-2 italic">
+                                            AI Analysis: {milestone.reasoning}
+                                        </p>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* Milestone Chat for all users */}
+                            <div className="border-t pt-3 mt-3">
+                                <MilestoneChat
+                                    milestoneId={index.toString()}
+                                    campaignAddress={campaignAddress}
+                                    description={milestone.description}
+                                    evidenceHash={milestone.evidenceHash}
+                                    onVerificationResult={(result) => {
+                                        console.log('AI verification result:', result);
+                                        loadCampaignDetails(); // Refresh after AI verification
+                                    }}
+                                />
+                            </div>
                         </div>
                     ))}
                 </div>
@@ -371,10 +433,124 @@ export function CampaignDetail({ campaignAddress }: CampaignDetailProps) {
                 </button>
             </div>
 
-            {/* Activity - Simplified for now */}
+            {/* Activity with Blockscout Integration */}
             <div className="bg-white rounded-lg shadow p-6">
                 <h2 className="text-2xl font-bold text-gray-900 mb-4">Recent Activity</h2>
-                <p className="text-gray-600">Activity tracking will be implemented with enhanced Blockscout integration.</p>
+
+                {/* Analytics Summary */}
+                {blockscoutAnalytics && (
+                    <div className="mb-6 p-4 bg-gray-50 rounded-lg">
+                        <h3 className="text-lg font-semibold mb-3">Campaign Analytics</h3>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                            <div>
+                                <span className="font-medium">Total Transactions:</span>
+                                <p className="text-2xl font-bold text-blue-600">{blockscoutAnalytics.totalTransactions}</p>
+                            </div>
+                            <div>
+                                <span className="font-medium">Total Volume:</span>
+                                <p className="text-2xl font-bold text-green-600">{blockscoutAnalytics.totalVolume} PYUSD</p>
+                            </div>
+                            <div>
+                                <span className="font-medium">Unique Backers:</span>
+                                <p className="text-2xl font-bold text-purple-600">{blockscoutAnalytics.uniqueContributors}</p>
+                            </div>
+                            <div>
+                                <span className="font-medium">Contract Verified:</span>
+                                <p className={`text-2xl font-bold ${blockscoutAnalytics.contractVerificationStatus ? 'text-green-600' : 'text-red-600'}`}>
+                                    {blockscoutAnalytics.contractVerificationStatus ? '✓' : '✗'}
+                                </p>
+                            </div>
+                        </div>
+                        {blockscoutAnalytics.contractVerificationStatus && (
+                            <div className="mt-3 text-sm text-gray-600">
+                                ✅ Contract source code is verified on Blockscout
+                            </div>
+                        )}
+                        {blockscoutAnalytics.sourceCodeAvailable && (
+                            <div className="mt-2 text-sm text-blue-600">
+                                🔍 Source code available for review
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                {/* Activity Feed */}
+                <div className="space-y-3">
+                    {blockscoutLoading ? (
+                        <div className="text-center py-8">
+                            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+                            <p className="text-gray-600 mt-2">Loading activity...</p>
+                        </div>
+                    ) : blockscoutActivity.length > 0 ? (
+                        blockscoutActivity.map((activity, index) => (
+                            <div key={index} className="flex items-center gap-3 p-3 border rounded-lg hover:bg-gray-50">
+                                <div className="flex-shrink-0">
+                                    {activity.type === 'contribution' && (
+                                        <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
+                                            <span className="text-green-600 font-bold text-sm">💰</span>
+                                        </div>
+                                    )}
+                                    {activity.type === 'milestone' && (
+                                        <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                                            <span className="text-blue-600 font-bold text-sm">🎯</span>
+                                        </div>
+                                    )}
+                                    {activity.type === 'refund' && (
+                                        <div className="w-8 h-8 bg-red-100 rounded-full flex items-center justify-center">
+                                            <span className="text-red-600 font-bold text-sm">↩️</span>
+                                        </div>
+                                    )}
+                                    {activity.type === 'transaction' && (
+                                        <div className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center">
+                                            <span className="text-gray-600 font-bold text-sm">🔄</span>
+                                        </div>
+                                    )}
+                                </div>
+                                <div className="flex-1">
+                                    <p className="text-sm font-medium text-gray-900">{activity.description}</p>
+                                    {activity.amount && (
+                                        <p className="text-sm text-green-600 font-medium">
+                                            +{parseFloat(activity.amount) / 1e6} PYUSD
+                                        </p>
+                                    )}
+                                    {activity.hash && (
+                                        <a
+                                            href={`${NETWORK_CONFIG.blockExplorer}/tx/${activity.hash}`}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="text-xs text-blue-600 hover:underline"
+                                        >
+                                            View on Blockscout ↗
+                                        </a>
+                                    )}
+                                </div>
+                                <div className="text-xs text-gray-500 text-right">
+                                    {new Date(activity.timestamp).toLocaleDateString()}
+                                    <br />
+                                    {new Date(activity.timestamp).toLocaleTimeString()}
+                                </div>
+                            </div>
+                        ))
+                    ) : (
+                        <div className="text-center py-8 text-gray-500">
+                            <p>No recent activity found.</p>
+                            <p className="text-sm mt-1">Activity will appear here as transactions occur.</p>
+                        </div>
+                    )}
+                </div>
+
+                {/* Activity Loading/Error States */}
+                {error && (
+                    <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-md">
+                        <p className="text-red-800 text-sm">⚠️ Error loading activity: {error}</p>
+                        <button
+                            onClick={() => window.location.reload()}
+                            className="mt-2 text-xs text-red-600 hover:text-red-800 underline"
+                        >
+                            Retry
+                        </button>
+                    </div>
+                )}
             </div>
         </div>
     );

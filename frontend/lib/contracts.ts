@@ -376,6 +376,11 @@ export interface Milestone {
     noVotes: bigint;
     aiReviewHash: string;
     fundsReleased: boolean;
+    // AI-enhanced fields
+    evidenceHash?: string;
+    confidence?: number;
+    reasoning?: string;
+    aiReportHash?: string;
 }
 
 export interface CampaignDetails extends CampaignSummary {
