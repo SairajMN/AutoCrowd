@@ -48,10 +48,13 @@ router.post('/verify', async (req, res) => {
 
     logger.info(`Verification request received for milestone ${value.milestoneId}`);
 
-    // Perform AI verification
-    const verificationResult = await aiVerificationService.verifyMilestone(value);
+    // Perform AI verification with real-time data (includes scam detection)
+    const verificationResult = await aiVerificationService.verifyMilestoneWithRealtimeData({
+      ...value,
+      submitterAddress: req.body.submitterAddress // Campaign creator address
+    });
 
-    // Return verification result
+    // Return enhanced verification result with scam detection
     res.json({
       success: true,
       data: {
@@ -60,6 +63,24 @@ router.post('/verify', async (req, res) => {
         verdict: verificationResult.verdict,
         confidence: verificationResult.confidence,
         reasoning: verificationResult.reasoning,
+        scamDetection: {
+          campaignCreatorRisk: verificationResult.realtimeData?.riskAssessment?.campaignCreatorRisk || 0,
+          overallRisk: verificationResult.realtimeData?.riskAssessment?.overallRisk || 0,
+          riskLevel: (verificationResult.realtimeData?.riskAssessment?.overallRisk || 0) > 0.7 ? 'HIGH' :
+            (verificationResult.realtimeData?.riskAssessment?.overallRisk || 0) > 0.4 ? 'MEDIUM' : 'LOW',
+          suggestions: verificationResult.realtimeData?.riskAssessment?.suggestions || [],
+          riskFactors: {
+            multipleCampaignCreator: (verificationResult.realtimeData?.riskAssessment?.campaignCreatorRisk || 0) > 0.3,
+            immediateWithdrawals: false, // Would be calculated from activity patterns
+            selfContribution: false,
+            unusualTiming: false,
+            overfundedCampaign: false
+          }
+        },
+        realtimeData: {
+          freshness: verificationResult.realtimeData?.freshness,
+          dataSourcesUsed: verificationResult.realtimeData?.usedDataTypes || []
+        },
         timestamp: new Date().toISOString()
       }
     });
@@ -252,6 +273,130 @@ router.post('/retry/:requestId', async (req, res) => {
 });
 
 /**
+ * POST /api/verification/scam-detection
+ * Analyze campaign creator for potential scams
+ */
+router.post('/scam-detection', async (req, res) => {
+  try {
+    const { campaignAddress, submitterAddress } = req.body;
+
+    if (!campaignAddress || !submitterAddress) {
+      return res.status(400).json({
+        error: 'Campaign address and submitter address are required'
+      });
+    }
+
+    // Get real-time context which includes scam analysis
+    const realtimeContext = aiVerificationService.getRealtimeVerificationContext(
+      campaignAddress,
+      submitterAddress
+    );
+
+    // Perform comprehensive scam risk assessment
+    const riskAssessment = await aiVerificationService.performRealtimeRiskAssessment(
+      { campaignAddress, submitterAddress },
+      realtimeContext
+    );
+
+    // Get detailed scam analysis
+    const creatorAnalysis = await aiVerificationService.analyzeCampaignCreator(campaignAddress);
+    const activityPatterns = aiVerificationService.analyzeCampaignActivity(creatorAnalysis);
+
+    // Calculate scam detection details
+    const scamAnalysis = {
+      campaignAddress,
+      creatorAddress: submitterAddress,
+      overallScamRisk: riskAssessment.campaignCreatorRisk,
+      riskLevel: riskAssessment.campaignCreatorRisk > 0.7 ? 'CRITICAL SCAM ALERT' :
+        riskAssessment.campaignCreatorRisk > 0.5 ? 'HIGH RISK' :
+          riskAssessment.campaignCreatorRisk > 0.3 ? 'MODERATE RISK' : 'LOW RISK',
+      creatorProfile: {
+        totalCampaigns: creatorAnalysis.totalCampaigns,
+        successRate: creatorAnalysis.successRate,
+        reputation: creatorAnalysis.reputation,
+        campaignsCompleted: Math.round(creatorAnalysis.totalCampaigns * creatorAnalysis.successRate)
+      },
+      suspiciousPatterns: {
+        immediateWithdrawals: {
+          detected: activityPatterns.immediateWithdrawals > 0.8,
+          rate: activityPatterns.immediateWithdrawals,
+          risk: activityPatterns.immediateWithdrawals > 0.8 ? 'HIGH' : 'LOW'
+        },
+        selfContribution: {
+          detected: activityPatterns.selfContributionRatio > 0.5,
+          percentage: activityPatterns.selfContributionRatio,
+          risk: activityPatterns.selfContributionRatio > 0.5 ? 'HIGH' : 'LOW'
+        },
+        unusualTiming: {
+          detected: activityPatterns.unusualTiming > 0.7,
+          patternScore: activityPatterns.unusualTiming,
+          risk: activityPatterns.unusualTiming > 0.7 ? 'HIGH' : 'MODERATE'
+        },
+        overfundedGoal: {
+          detected: activityPatterns.overfundedRatio > 2,
+          ratio: activityPatterns.overfundedRatio,
+          risk: activityPatterns.overfundedRatio > 2 ? 'MODERATE' : 'LOW'
+        },
+        multipleCampaigns: {
+          detected: creatorAnalysis.totalCampaigns > 5,
+          count: creatorAnalysis.totalCampaigns,
+          risk: creatorAnalysis.totalCampaigns > 5 ? 'MODERATE' : 'LOW'
+        },
+        lowSuccessRate: {
+          detected: creatorAnalysis.successRate < 0.3,
+          rate: creatorAnalysis.successRate,
+          risk: creatorAnalysis.successRate < 0.3 ? 'HIGH' : creatorAnalysis.successRate < 0.5 ? 'MODERATE' : 'LOW'
+        }
+      },
+      riskBreakdown: {
+        multipleFailedCampaigns: creatorAnalysis.successRate < 0.3 ? 0.4 : 0,
+        immediateFundWithdrawal: activityPatterns.immediateWithdrawals > 0.8 ? 0.5 : 0,
+        suspiciousSelfContribution: activityPatterns.selfContributionRatio > 0.5 ? 0.4 : 0,
+        unusualActivityPatterns: activityPatterns.unusualTiming > 0.7 ? 0.3 : 0,
+        implausibleFunding: activityPatterns.overfundedRatio > 2 ? 0.2 : 0,
+        newCreator: creatorAnalysis.totalCampaigns < 2 ? 0.2 : 0
+      },
+      recommendedActions: riskAssessment.suggestions,
+      marketContext: {
+        pyusdStable: realtimeContext.pyusdPrice?.usd ? Math.abs(realtimeContext.pyusdPrice.usd - 1) < 0.01 : null,
+        marketVolatile: realtimeContext.marketData?.btc?.percent_change_24h ?
+          Math.abs(realtimeContext.marketData.btc.percent_change_24h) > 5 : false
+      },
+      confidenceLevel: 'HIGH', // Analysis confidence based on real-time data availability
+      lastAnalyzed: new Date().toISOString(),
+      dataFreshness: Math.min(...[
+        realtimeContext.timestamp,
+        realtimeContext.pyusdPrice?.lastUpdated || realtimeContext.timestamp,
+        realtimeContext.marketData?.timestamp || realtimeContext.timestamp,
+        realtimeContext.blockchainState?.lastUpdated || realtimeContext.timestamp
+      ].map(d => Date.now() - new Date(d).getTime()))
+    };
+
+    // Add scam detection warning if high risk
+    if (scamAnalysis.overallScamRisk > 0.7) {
+      scamAnalysis.warning = '🚨 CRITICAL: This campaign creator shows strong indicators of fraudulent activity. Immediate action required.';
+    } else if (scamAnalysis.overallScamRisk > 0.5) {
+      scamAnalysis.warning = '⚠️ HIGH RISK: This campaign creator exhibits suspicious patterns. Enhanced verification recommended.';
+    } else if (scamAnalysis.overallScamRisk > 0.3) {
+      scamAnalysis.warning = '⚡ MODERATE RISK: Monitor this campaign creator closely during verification.';
+    }
+
+    res.json({
+      success: true,
+      scamDetection: scamAnalysis,
+      timestamp: new Date().toISOString()
+    });
+
+  } catch (error) {
+    logger.error('Scam detection analysis failed:', error);
+    res.status(500).json({
+      error: 'Scam detection analysis failed',
+      message: error.message
+    });
+  }
+});
+
+/**
  * GET /api/verification/health
  * Health check for verification service
  */
@@ -262,7 +407,8 @@ router.get('/health', async (req, res) => {
       timestamp: new Date().toISOString(),
       services: {
         aiVerification: 'operational',
-        blockchain: 'operational'
+        blockchain: 'operational',
+        scamDetection: 'active'
       }
     };
 

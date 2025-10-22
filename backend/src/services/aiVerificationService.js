@@ -179,22 +179,636 @@ class AIVerificationService {
   }
 
   /**
-   * Analyze campaign activity patterns for scam detection
+   * Analyze real campaign contract activity patterns for onchain scam detection
    */
-  analyzeCampaignActivity(creatorAnalysis) {
-    // Mock analysis - in production, analyze real campaign data
+  async analyzeCampaignActivity(campaignAddress, realtimeContext) {
+    try {
+      // Get real campaign contract interactions from blockchain
+      const campaignTxs = await this.getCampaignContractTransactions(campaignAddress);
+      const campaignStats = this.calculateCampaignStatistics(campaignTxs);
 
-    const patterns = {
-      immediateWithdrawals: Math.random() * 0.5, // Fraction of funds withdrawn immediately
-      selfContributionRatio: Math.random() * 0.3, // Self-contribution percentage
-      unusualTiming: Math.random() * 0.4, // Unusual timing patterns
-      overfundedRatio: 1 + Math.random() * 1, // How much over/under funded
-      contributorDiversity: Math.random(), // Diversity of contributor base
-      milestoneCompletion: Math.random(), // Milestone completion rate
-      socialProofScore: Math.random() // External validation score
+      // Analyze contribution patterns
+      const contributionPatterns = this.analyzeContributionPatterns(campaignTxs, campaignStats);
+
+      // Check creator interactions within campaign
+      const creatorInteractions = await this.analyzeCreatorInteractions(campaignAddress, campaignTxs);
+
+      // Analyze fund flow patterns
+      const fundFlowAnalysis = this.analyzeFundFlowPatterns(campaignTxs, campaignStats);
+
+      // Time-based behavior analysis
+      const temporalPatterns = this.analyzeTemporalPatterns(campaignTxs);
+
+      return {
+        campaignStats,
+        contributionPatterns,
+        creatorInteractions,
+        fundFlowAnalysis,
+        temporalPatterns,
+        riskIndicators: this.generateOnchainRiskIndicators(contributionPatterns, creatorInteractions, fundFlowAnalysis, temporalPatterns),
+        explanation: this.generateOnchainAnalysisExplanation(contributionPatterns, creatorInteractions)
+      };
+    } catch (error) {
+      logger.warn('Failed to analyze campaign activity:', error);
+      return this.getFallbackAnalysis(campaignAddress);
+    }
+  }
+
+  /**
+   * Get all transactions for a specific campaign contract
+   */
+  async getCampaignContractTransactions(campaignAddress) {
+    try {
+      // Query Blockscout for campaign contract transactions
+      const response = await axios.get(
+        `${this.blockscoutApiUrl}?module=account&action=txlist&address=${campaignAddress}&page=1&offset=50`,
+        { timeout: 10000 }
+      );
+
+      if (response.data?.result) {
+        return response.data.result.map(tx => ({
+          hash: tx.hash,
+          from: tx.from.toLowerCase(),
+          to: tx.to.toLowerCase(),
+          value: tx.value,
+          timestamp: new Date(parseInt(tx.timeStamp) * 1000),
+          blockNumber: parseInt(tx.blockNumber),
+          gasUsed: tx.gasUsed,
+          function: this.decodeTransactionFunction(tx.input), // Decode contract call
+          contractAddress: campaignAddress.toLowerCase()
+        }));
+      }
+    } catch (error) {
+      logger.warn(`Failed to get campaign transactions for ${campaignAddress}:`, error.message);
+    }
+
+    return [];
+  }
+
+  /**
+   * Decode transaction function calls (simplified)
+   */
+  decodeTransactionFunction(input) {
+    // In production, this would use ethers.js to decode contract calls
+    if (!input || input === '0x') return 'native_transfer';
+
+    // Look for common function signatures
+    const functionSignatures = {
+      '0xa9059cbb': 'transfer',
+      '0x095ea7b3': 'approve',
+      '0x23b872dd': 'transferFrom',
+      'contribute': 'contribute',
+      'withdraw': 'withdraw',
+      'votemileston': 'voteMilestone',
+      'releasemiles': 'releaseMilestone'
     };
 
-    return patterns;
+    const signature = input.slice(0, 10); // First 4 bytes + 0x
+    return functionSignatures[signature] || 'unknown';
+  }
+
+  /**
+   * Calculate comprehensive campaign statistics from onchain data
+   */
+  calculateCampaignStatistics(txs) {
+    const now = Date.now();
+    const campaignStart = Math.min(...txs.map(tx => tx.timestamp.getTime()));
+    const campaignDuration = Math.max(0, now - campaignStart);
+
+    const contributions = txs.filter(tx => tx.function === 'contribute' || (tx.to === tx.contractAddress && parseInt(tx.value) > 0));
+    const withdrawals = txs.filter(tx => tx.function === 'withdraw' || tx.from === tx.contractAddress);
+
+    // Calculate actual volumes
+    const totalContributions = contributions.reduce((sum, tx) => sum + parseInt(tx.value || '0'), 0);
+    const totalWithdrawals = withdrawals.reduce((sum, tx) => sum + parseInt(tx.value || '0'), 0);
+
+    // Unique contributors (exclude creator and contract itself)
+    const contributors = new Set(contributions.map(tx => tx.from));
+    const creator = this.identifyCampaignCreator(txs);
+    if (creator) contributors.delete(creator);
+
+    return {
+      totalContributions,
+      totalWithdrawals,
+      netBalance: totalContributions - totalWithdrawals,
+      uniqueContributors: contributors.size,
+      totalTxCount: txs.length,
+      contributionTxCount: contributions.length,
+      withdrawalTxCount: withdrawals.length,
+      averageContribution: contributors.size > 0 ? totalContributions / contributors.size : 0,
+      campaignDurationDays: campaignDuration / (1000 * 60 * 60 * 24),
+      firstContribution: campaignStart,
+      lastActivity: Math.max(...txs.map(tx => tx.timestamp.getTime())),
+      creatorAddress: creator
+    };
+  }
+
+  /**
+   * Identify campaign creator from contract deployment or initial setup
+   */
+  identifyCampaignCreator(txs) {
+    // Find the address that called factory functions or deployed the contract
+    const deploymentTx = txs.find(tx => tx.function === 'createCampaign' || tx.to === '0x0000000000000000000000000000000000000000');
+    if (deploymentTx) return deploymentTx.from;
+
+    // Alternatively, find the address with most administrative actions
+    const adminActions = txs.filter(tx => ['setGoal', 'addMilestone', 'updateCampaign'].includes(tx.function));
+    if (adminActions.length > 0) {
+      // Group by sender and find most active administrative address
+      const adminFreq = {};
+      adminActions.forEach(tx => {
+        adminFreq[tx.from] = (adminFreq[tx.from] || 0) + 1;
+      });
+
+      const adminAddresses = Object.entries(adminFreq).sort(([, a], [, b]) => b - a);
+      return adminAddresses[0]?.[0];
+    }
+
+    return null;
+  }
+
+  /**
+   * Analyze real contribution patterns from onchain data
+   */
+  analyzeContributionPatterns(txs, stats) {
+    const contributionTxs = txs.filter(tx => tx.function === 'contribute' || (tx.to === tx.contractAddress && parseInt(tx.value) > 0));
+    const withdrawals = txs.filter(tx => tx.function === 'withdraw' || tx.from === tx.contractAddress);
+
+    // Time analysis
+    const contributionTimes = contributionTxs.map(tx => tx.timestamp.getTime());
+    const withdrawalTimes = withdrawals.map(tx => tx.timestamp.getTime());
+
+    // Amount distribution analysis
+    const amounts = contributionTxs.map(tx => parseInt(tx.value));
+    const avgAmount = amounts.length > 0 ? amounts.reduce((a, b) => a + b, 0) / amounts.length : 0;
+    const largeContributions = amounts.filter(amount => amount > avgAmount * 2).length;
+    const smallContributions = amounts.filter(amount => amount < avgAmount * 0.1).length;
+
+    // Contributor concentration
+    const contributorCounts = {};
+    contributionTxs.forEach(tx => {
+      contributorCounts[tx.from] = (contributorCounts[tx.from] || 0) + 1;
+    });
+
+    const top10Contributors = Object.entries(contributorCounts)
+      .sort(([, a], [, b]) => b - a)
+      .slice(0, 10);
+
+    const top10ContributionPercent = stats.uniqueContributors > 0 ?
+      top10Contributors.reduce((sum, [, count]) => sum + count, 0) / stats.totalTxCount : 0;
+
+    // Temporal patterns
+    const firstContribution = contributionTimes.length > 0 ? Math.min(...contributionTimes) : null;
+    const lastContribution = contributionTimes.length > 0 ? Math.max(...contributionTimes) : null;
+    const peakActivity = this.findPeakActivityHours(contributionTxs);
+
+    return {
+      totalContributions: stats.totalContributions,
+      uniqueContributors: stats.uniqueContributors,
+      averageContribution: stats.averageContribution,
+      concentrationRatio: top10ContributionPercent,
+      largeContributorRatio: stats.uniqueContributors > 0 ? largeContributions / stats.uniqueContributors : 0,
+      microContributorRatio: stats.uniqueContributors > 0 ? smallContributions / stats.uniqueContributors : 0,
+      fundingVelocity: this.calculateFundingVelocity(contributionTxs),
+      temporalDistribution: this.analyzeTemporalDistribution(contributionTxs),
+      peakActivityHours: peakActivity,
+      firstContribution,
+      lastContribution,
+      fundraisingDuration: lastContribution && firstContribution ? lastContribution - firstContribution : 0,
+      withdrawalPatterns: this.analyzeWithdrawalPatterns(withdrawals, contributionTxs),
+      contributorDiversity: this.calculateDiversityScore(contributorCounts)
+    };
+  }
+
+  /**
+   * Analyze creator's interactions within the campaign
+   */
+  async analyzeCreatorInteractions(campaignAddress, txs) {
+    const creator = this.identifyCampaignCreator(txs);
+    if (!creator) return { creatorFound: false };
+
+    // Filter creator's transactions with this campaign
+    const creatorTxs = txs.filter(tx => tx.from === creator || tx.to === creator);
+
+    // Analyze creator's contribution
+    const creatorContributions = creatorTxs.filter(tx => tx.function === 'contribute' || (tx.to === campaignAddress && parseInt(tx.value) > 0));
+    const creatorWithdrawals = creatorTxs.filter(tx => tx.from === campaignAddress || tx.function === 'withdraw');
+
+    const creatorContributionTotal = creatorContributions.reduce((sum, tx) => sum + parseInt(tx.value || '0'), 0);
+    const creatorWithdrawalTotal = creatorWithdrawals.reduce((sum, tx) => sum + parseInt(tx.value || '0'), 0);
+
+    const totalCampaignContributions = txs.reduce((sum, tx) =>
+      sum + (tx.function === 'contribute' || (tx.to === campaignAddress && parseInt(tx.value) > 0) ? parseInt(tx.value || '0') : 0), 0);
+
+    // Timing analysis for creator actions
+    const firstCreatorAction = creatorTxs.length > 0 ? Math.min(...creatorTxs.map(tx => tx.timestamp.getTime())) : null;
+    const lastCreatorAction = creatorTxs.length > 0 ? Math.max(...creatorTxs.map(tx => tx.timestamp.getTime())) : null;
+
+    const campaignStart = txs.length > 0 ? Math.min(...txs.map(tx => tx.timestamp.getTime())) : Date.now();
+    const timeToFirstCreatorContribution = firstCreatorAction ? firstCreatorAction - campaignStart : null;
+
+    return {
+      creatorFound: true,
+      creatorAddress: creator,
+      selfContributionRatio: totalCampaignContributions > 0 ? creatorContributionTotal / totalCampaignContributions : 0,
+      withdrawalRatio: creatorContributionTotal > 0 ? creatorWithdrawalTotal / Math.max(creatorContributionTotal, 1) : 0,
+      interactionFrequency: creatorTxs.length,
+      firstInteraction: firstCreatorAction ? new Date(firstCreatorAction) : null,
+      lastInteraction: lastCreatorAction ? new Date(lastCreatorAction) : null,
+      timeToFirstContribution: timeToFirstCreatorContribution,
+      adminActions: creatorTxs.filter(tx => ['setGoal', 'addMilestone', 'updateCampaign'].includes(tx.function)).length,
+      earlyWithdrawals: this.detectEarlyWithdrawals(creatorWithdrawals, campaignStart),
+      contributionPatterns: {
+        contributedBeforeOthers: this.didCreatorContributeFirst(creatorContributions, txs),
+        withdrewEarly: this.analyzeEarlyWithdrawal(creatorWithdrawals, campaignStart),
+        maintainedParticipation: creatorTxs.length > 2
+      }
+    };
+  }
+
+  /**
+   * Analyze fund flow patterns
+   */
+  analyzeFundFlowPatterns(txs, stats) {
+    const inflows = txs.filter(tx => tx.to === stats.contractAddress && parseInt(tx.value) > 0);
+    const outflows = txs.filter(tx => tx.from === stats.contractAddress || tx.function === 'withdraw');
+
+    // Flow rate analysis
+    const inflowRate = stats.campaignDurationDays > 0 ? stats.totalContributions / stats.campaignDurationDays : 0;
+    const outflowRate = stats.campaignDurationDays > 0 ? stats.totalWithdrawals / stats.campaignDurationDays : 0;
+
+    // Sudden flow changes (potential manipulation indicators)
+    const suddenLargeWithdrawal = this.detectSuddenLargeMovements(outflows, 'out');
+    const suddenLargeContribution = this.detectSuddenLargeMovements(inflows, 'in');
+
+    return {
+      inflowRate, // PYUSD per day
+      outflowRate, // PYUSD per day
+      retentionRatio: stats.totalContributions > 0 ? (stats.totalContributions - stats.totalWithdrawals) / stats.totalContributions : 0,
+      flowRatio: stats.totalWithdrawals > 0 ? stats.totalContributions / stats.totalWithdrawals : stats.totalContributions,
+      suddenMovements: {
+        largeWithdrawals: suddenLargeWithdrawal.count,
+        largeContributions: suddenLargeContribution.count,
+        withdrawalSpikes: suddenLargeWithdrawal.detected,
+        contributionDumps: suddenLargeContribution.detected
+      },
+      flowRegularity: this.calculateFlowRegularity(inflows, outflows)
+    };
+  }
+
+  /**
+   * Analyze temporal patterns in transactions
+   */
+  analyzeTemporalPatterns(txs) {
+    const contributions = txs.filter(tx => tx.function === 'contribute');
+    const withdrawals = txs.filter(tx => tx.function === 'withdraw');
+
+    // Hourly distribution
+    const hourDistribution = new Array(24).fill(0);
+    contributions.forEach(tx => {
+      const hour = tx.timestamp.getHours();
+      hourDistribution[hour]++;
+    });
+
+    const peakHour = hourDistribution.indexOf(Math.max(...hourDistribution));
+    const valleyHour = hourDistribution.indexOf(Math.min(...hourDistribution));
+
+    // Weekend vs weekday analysis
+    const weekendCount = contributions.filter(tx => {
+      const day = tx.timestamp.getDay();
+      return day === 0 || day === 6; // Sunday = 0, Saturday = 6
+    }).length;
+
+    const weekdayCount = contributions.length - weekendCount;
+    const weekendRatio = contributions.length > 0 ? weekendCount / contributions.length : 0;
+
+    // Burst activity detection
+    const activityBursts = this.detectActivityBursts(contributions);
+
+    return {
+      peakHour,
+      valleyHour,
+      weekendActivity: weekendRatio,
+      weekdayActivity: 1 - weekendRatio,
+      activityBursts: activityBursts.count,
+      burstIntensity: activityBursts.intensity,
+      temporalRegularity: this.calculateTemporalRegularity(contributions),
+      unusualTiming: weekendRatio > 0.3 || hourDistribution[peakHour] > contributions.length * 0.5
+    };
+  }
+
+  /**
+   * Generate risk indicators based on onchain analysis
+   */
+  generateOnchainRiskIndicators(contributionPatterns, creatorInteractions, fundFlow, temporalPatterns) {
+    const indicators = [];
+
+    // Creator self-contribution risk
+    if (creatorInteractions.selfContributionRatio > 0.5) {
+      indicators.push({
+        type: 'creator_self_contribution',
+        severity: 'high',
+        description: `Creator contributed ${Math.round(creatorInteractions.selfContributionRatio * 100)}% of total funds - potential self-dealing`,
+        score: Math.min(1, creatorInteractions.selfContributionRatio * 2)
+      });
+    }
+
+    // Fund concentration risk
+    if (contributionPatterns.concentrationRatio > 0.8) {
+      indicators.push({
+        type: 'fund_concentration',
+        severity: 'high',
+        description: `Top 10 contributors hold ${(contributionPatterns.concentrationRatio * 100).toFixed(1)}% of activity - manipulation risk`,
+        score: Math.min(1, contributionPatterns.concentrationRatio)
+      });
+    }
+
+    // Early withdrawal risk
+    if (creatorInteractions.earlyWithdrawals) {
+      indicators.push({
+        type: 'early_withdrawal',
+        severity: 'critical',
+        description: 'Creator withdrew funds within 48 hours of campaign start - scam pattern',
+        score: 1.0
+      });
+    }
+
+    // Unusual timing risk
+    if (temporalPatterns.unusualTiming) {
+      indicators.push({
+        type: 'unusual_timing',
+        severity: 'medium',
+        description: `${Math.round(temporalPatterns.weekendActivity * 100)}% activity occurs during unusual hours`,
+        score: temporalPatterns.unusualTiming ? 0.6 : 0.2
+      });
+    }
+
+    // Flow irregularity risk
+    if (fundFlow.flowRegularity < 0.3) {
+      indicators.push({
+        type: 'irregular_flows',
+        severity: 'medium',
+        description: 'Irregular fund flows detected - may indicate manipulation',
+        score: Math.max(0.3, (1 - fundFlow.flowRegularity))
+      });
+    }
+
+    return indicators;
+  }
+
+  /**
+   * Generate human-readable explanation of onchain analysis
+   */
+  generateOnchainAnalysisExplanation(contributionPatterns, creatorInteractions) {
+    const explanations = [];
+
+    if (creatorInteractions.creatorFound) {
+      explanations.push(`Creator ${creatorInteractions.creatorAddress} has ${creatorInteractions.interactionFrequency} interactions with this campaign`);
+
+      if (creatorInteractions.selfContributionRatio > 0) {
+        explanations.push(`Creator contributed ${(creatorInteractions.selfContributionRatio * 100).toFixed(1)}% of total campaign funds`);
+      }
+
+      if (creatorInteractions.earlyWithdrawals) {
+        explanations.push('⚠️ Creator made early withdrawals - potential scam pattern');
+      }
+    }
+
+    if (contributionPatterns.uniqueContributors > 0) {
+      explanations.push(`${contributionPatterns.uniqueContributors} unique contributors with average contribution of $${(contributionPatterns.averageContribution / 1e18).toFixed(2)}`);
+    }
+
+    if (contributionPatterns.concentrationRatio > 0.7) {
+      explanations.push(`High contributor concentration detected (${(contributionPatterns.concentrationRatio * 100).toFixed(1)}% from top 10)`);
+    }
+
+    return explanations.join('. ');
+  }
+
+  /**
+   * Helper functions for advanced analysis
+   */
+  calculateFundingVelocity(contributions) {
+    if (contributions.length < 2) return 0;
+
+    const timespan = (contributions[contributions.length - 1].timestamp.getTime() -
+      contributions[0].timestamp.getTime()) / (1000 * 60 * 60); // hours
+
+    return timespan > 0 ? contributions.length / timespan : 0; // contributions per hour
+  }
+
+  analyzeTemporalDistribution(contributions) {
+    // Calculate inter-arrival times and analyze distribution
+    if (contributions.length < 3) return { regularity: 0, pattern: 'insufficient_data' };
+
+    const times = contributions.sort((a, b) => a.timestamp - b.timestamp)
+      .map(tx => tx.timestamp.getTime());
+
+    const intervals = [];
+    for (let i = 1; i < times.length; i++) {
+      intervals.push((times[i] - times[i - 1]) / (1000 * 60)); // minutes
+    }
+
+    const avgInterval = intervals.reduce((a, b) => a + b, 0) / intervals.length;
+    const variance = intervals.reduce((sum, interval) => sum + Math.pow(interval - avgInterval, 2), 0) / intervals.length;
+    const regularity = Math.max(0, 1 - Math.sqrt(variance) / avgInterval);
+
+    return {
+      regularity: Math.max(0, Math.min(1, regularity)),
+      pattern: regularity > 0.7 ? 'regular' : regularity > 0.4 ? 'moderate' : 'irregular',
+      avgIntervalMinutes: avgInterval
+    };
+  }
+
+  findPeakActivityHours(txs) {
+    const hourCounts = new Array(24).fill(0);
+    txs.forEach(tx => {
+      const hour = tx.timestamp.getHours();
+      hourCounts[hour]++;
+    });
+
+    const peakHour = hourCounts.indexOf(Math.max(...hourCounts));
+    const totalTxs = txs.length;
+    const peakPercentage = totalTxs > 0 ? hourCounts[peakHour] / totalTxs : 0;
+
+    return {
+      hour: peakHour,
+      percentage: peakPercentage,
+      count: hourCounts[peakHour],
+      isUnusual: peakPercentage > 0.5 // More than half activity in one hour
+    };
+  }
+
+  detectSuddenLargeMovements(txs, direction) {
+    if (txs.length < 2) return { detected: false, count: 0 };
+
+    const values = txs.map(tx => parseInt(tx.value || '0'));
+    const avgValue = values.reduce((a, b) => a + b, 0) / values.length;
+
+    const largeMovements = values.filter(value => value > avgValue * 3); // 3x average
+
+    return {
+      detected: largeMovements.length > 0,
+      count: largeMovements.length,
+      ratio: largeMovements.length / values.length,
+      largest: Math.max(...values)
+    };
+  }
+
+  calculateDiversityScore(contributorCounts) {
+    const totalContributions = Object.values(contributorCounts).reduce((a, b) => a + b, 0);
+    const uniqueContributors = Object.keys(contributorCounts).length;
+
+    if (uniqueContributors <= 1) return 0;
+
+    // Gini coefficient approximation for contribution diversity
+    const values = Object.values(contributorCounts).sort((a, b) => a - b);
+    let cumulative = 0;
+    let gini = 0;
+
+    values.forEach((val, i) => {
+      cumulative += val;
+      gini += (2 * (i + 1) - uniqueContributors - 1) * (val / totalContributions);
+    });
+
+    return Math.max(0, Math.min(1, 1 - gini / uniqueContributors)); // Higher = more diverse
+  }
+
+  detectActivityBursts(contributions) {
+    if (contributions.length < 5) return { detected: false, count: 0, intensity: 0 };
+
+    // Group contributions by hour
+    const hourlyActivity = {};
+    contributions.forEach(tx => {
+      const hourKey = tx.timestamp.toISOString().slice(0, 13); // YYYY-MM-DDTHH
+      hourlyActivity[hourKey] = (hourlyActivity[hourKey] || 0) + 1;
+    });
+
+    const activities = Object.values(hourlyActivity);
+    const avgActivity = activities.reduce((a, b) => a + b, 0) / activities.length;
+    const stdDev = Math.sqrt(
+      activities.reduce((sum, activity) => sum + Math.pow(activity - avgActivity, 2), 0) / activities.length
+    );
+
+    const bursts = activities.filter(activity => activity > avgActivity + 2 * stdDev);
+    const burstIntensity = bursts.length > 0 ? Math.max(...bursts) / avgActivity : 0;
+
+    return {
+      detected: burstIntensity > 3,
+      count: bursts.length,
+      intensity: Math.min(5, burstIntensity) / 5, // Normalize to 0-1
+      maxBurst: Math.max(...bursts, 0)
+    };
+  }
+
+  didCreatorContributeFirst(creatorContributions, allTxs) {
+    if (creatorContributions.length === 0 || allTxs.length === 0) return false;
+
+    const firstContribution = allTxs
+      .filter(tx => tx.function === 'contribute')
+      .sort((a, b) => a.timestamp - b.timestamp)[0];
+
+    const creatorFirstContribution = creatorContributions
+      .sort((a, b) => a.timestamp - b.timestamp)[0];
+
+    return creatorFirstContribution?.hash === firstContribution?.hash;
+  }
+
+  analyzeEarlyWithdrawal(withdrawals, campaignStart) {
+    const earlyWithdrawals = withdrawals.filter(tx =>
+      tx.timestamp.getTime() - campaignStart < 48 * 60 * 60 * 1000 // Within 48 hours
+    );
+
+    return {
+      count: earlyWithdrawals.length,
+      ratio: withdrawals.length > 0 ? earlyWithdrawals.length / withdrawals.length : 0,
+      detected: earlyWithdrawals.length > 0
+    };
+  }
+
+  detectEarlyWithdrawals(withdrawals, campaignStart) {
+    if (withdrawals.length === 0) return false;
+
+    // Check if any withdrawal happened very early
+    const earliestWithdrawal = Math.min(...withdrawals.map(tx => tx.timestamp.getTime()));
+    const hoursSinceStart = (earliestWithdrawal - campaignStart) / (1000 * 60 * 60);
+
+    return hoursSinceStart < 24; // Withdrawal within 24 hours = early
+  }
+
+  calculateFlowRegularity(inflows, outflows) {
+    if (inflows.length < 3 && outflows.length < 3) return 0;
+
+    const allFlows = [...inflows, ...outflows].sort((a, b) => a.timestamp - b.timestamp);
+    const times = allFlows.map(tx => tx.timestamp.getTime());
+    const values = allFlows.map(tx => parseInt(tx.value || '0'));
+
+    // Calculate coefficients of variation for timing and amount
+    const timeCv = this.calculateCoefficientOfVariation(times);
+    const valueCv = this.calculateCoefficientOfVariation(values);
+
+    // Regularity is inverse of variation (1 = perfectly regular, 0 = highly irregular)
+    const regularity = Math.max(0, Math.min(1, 2 - (timeCv + valueCv)));
+
+    return regularity;
+  }
+
+  calculateCoefficientOfVariation(values) {
+    if (values.length < 2) return 1;
+
+    const mean = values.reduce((a, b) => a + b, 0) / values.length;
+    if (mean === 0) return 1;
+
+    const variance = values.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / values.length;
+    const stdDev = Math.sqrt(variance);
+
+    return stdDev / mean;
+  }
+
+  analyzeWithdrawalPatterns(withdrawals, contributions) {
+    if (withdrawals.length === 0) return { pattern: 'no_withdrawals' };
+
+    const totalContributed = contributions.reduce((sum, tx) => sum + parseInt(tx.value || '0'), 0);
+    const totalWithdrawn = withdrawals.reduce((sum, tx) => sum + parseInt(tx.value || '0'), 0);
+
+    const withdrawalRate = totalContributed > 0 ? totalWithdrawn / totalContributed : 0;
+    const avgTimeBetweenWithdrawals = this.calculateAvgTimeBetweenTransactions(withdrawals);
+
+    return {
+      withdrawalRate,
+      totalWithdrawn,
+      withdrawalFrequency: withdrawals.length,
+      avgTimeBetweenWithdrawals,
+      pattern: withdrawalRate > 0.8 ? 'rapid_exhaustion' :
+        withdrawalRate > 0.5 ? 'moderate_withdrawal' :
+          withdrawalRate > 0.2 ? 'controlled_withdrawal' : 'conservative'
+    };
+  }
+
+  calculateAvgTimeBetweenTransactions(txs) {
+    if (txs.length < 2) return null;
+
+    const sortedTxs = txs.sort((a, b) => a.timestamp - b.timestamp);
+    const intervals = [];
+
+    for (let i = 1; i < sortedTxs.length; i++) {
+      intervals.push(sortedTxs[i].timestamp.getTime() - sortedTxs[i - 1].timestamp.getTime());
+    }
+
+    return intervals.reduce((a, b) => a + b, 0) / intervals.length / (1000 * 60 * 60); // hours
+  }
+
+  getFallbackAnalysis(campaignAddress) {
+    // Return safe defaults when analysis fails
+    return {
+      campaignStats: { totalContributions: 0, uniqueContributors: 0 },
+      contributionPatterns: { totalContributions: 0, uniqueContributors: 0, averageContribution: 0 },
+      creatorInteractions: { creatorFound: false },
+      fundFlowAnalysis: { retentionRatio: 0, flowRegularity: 0 },
+      temporalPatterns: { unusualTiming: false },
+      riskIndicators: [],
+      explanation: 'Analysis unavailable - using conservative approach'
+    };
   }
 
   /**
@@ -782,25 +1396,102 @@ calculatePatternRisk(patterns) {
 }
 
 /**
- * Generate risk mitigation suggestions
+ * Generate risk mitigation suggestions with AI-human hybrid approach
  */
 generateRiskMitigationSuggestions(risks) {
   const suggestions = [];
 
+  // AI-Generated Automated Recommendations
   if (risks.contributorRisk > 0.7) {
-    suggestions.push('Require additional identity verification for high-risk contributor');
+    suggestions.push({
+      type: 'AI_AUTOMATED',
+      action: 'Require additional identity verification for high-risk contributor',
+      reason: 'Statistical anomaly detected in contributor behavior patterns',
+      confidence: 'High',
+      escalationLevel: 'MODERATE'
+    });
   }
 
   if (risks.marketRisk > 0.6) {
-    suggestions.push('Consider delaying high-value milestones during market volatility');
+    suggestions.push({
+      type: 'AI_AUTOMATED',
+      action: 'Consider delaying high-value milestones during market volatility',
+      reason: 'Real-time market analysis indicates elevated risk conditions',
+      confidence: 'Medium',
+      escalationLevel: 'LOW'
+    });
   }
 
   if (risks.pyusdStability > 0.4) {
-    suggestions.push('Monitor PYUSD peg stability closely during verification');
+    suggestions.push({
+      type: 'AI_AUTOMATED',
+      action: 'Monitor PYUSD peg stability closely during verification',
+      reason: 'Stablecoin depegging risk requires enhanced monitoring',
+      confidence: 'High',
+      escalationLevel: 'MODERATE'
+    });
   }
 
+  // Human Oversight Triggers
+  if (risks.overallRisk > 0.8) {
+    suggestions.push({
+      type: 'HUMAN_OVERRIDE_REQUIRED',
+      action: '🚨 MANUAL HUMAN REVIEW REQUIRED: Campaign requires immediate human moderator attention',
+      reason: 'Risk score exceeds automated threshold - human expertise required for final decision',
+      confidence: 'N/A - Human Judgment Required',
+      escalationLevel: 'CRITICAL',
+      requiredAction: 'Full manual investigation and human decision-making'
+    });
+  } else if (risks.overallRisk > 0.6) {
+    suggestions.push({
+      type: 'HUMAN_ESCALATION',
+      action: '⚠️ ESCALATE TO HUMAN REVIEW: Awaiting human moderator verification for high-risk scenario',
+      reason: 'AI confidence insufficient for automated decision - requires human expertise',
+      confidence: 'Low - Human Oversight Needed',
+      escalationLevel: 'HIGH',
+      requiredAction: 'Human reviewer must validate AI findings'
+    });
+  } else if (risks.overallRisk > 0.4) {
+    suggestions.push({
+      type: 'HUMAN_MONITORING',
+      action: '👁️ HUMAN MONITORING REQUIRED: Regular human oversight recommended for moderate-risk campaign',
+      reason: 'Pattern requires ongoing human supervision alongside AI monitoring',
+      confidence: 'Medium',
+      escalationLevel: 'MODERATE',
+      requiredAction: 'Add to human monitoring queue for periodic review'
+    });
+  }
+
+  // AI Continuous Learning Suggestions
+  if (risks.overallRisk > 0.5) {
+    suggestions.push({
+      type: 'AI_LEARNING_FEEDBACK',
+      action: 'COLLECT GROUND TRUTH DATA: This case should be reviewed to improve future AI detection accuracy',
+      reason: 'High-confidence AI decisions help train better detection models',
+      confidence: 'Meta-Analysis',
+      escalationLevel: 'LOW',
+      requiredAction: 'Store outcome for AI model training'
+    });
+  }
+
+  // Transparency and Explainability (Human Trust Building)
+  suggestions.push({
+    type: 'TRANSPARENCY_INFO',
+    action: 'DISPLAY AI DECISIONS TRANSPARENTLY: Show contributors and creators AI risk assessment reasoning',
+    reason: 'Building trust requires explainable AI decisions and audit trails',
+    confidence: 'Policy Requirement',
+    escalationLevel: 'COMPLIANCE',
+    requiredAction: 'Ensure all AI decisions are logged and explainable to humans'
+  });
+
   if (suggestions.length === 0) {
-    suggestions.push('No significant risks detected at this time');
+    suggestions.push({
+      type: 'AI_AUTOMATED',
+      action: 'No significant risks detected at this time',
+      reason: 'All automated checks passed successfully',
+      confidence: 'High',
+      escalationLevel: 'NONE'
+    });
   }
 
   return suggestions;
