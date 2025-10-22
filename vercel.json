@@ -20,8 +20,11 @@
       "dest": "/frontend/$1"
     }
   ],
+  "outputDirectory": "",
   "env": {
     "NODE_ENV": "production"
   },
-  "regions": ["sin1"]
+  "regions": [
+    "sin1"
+  ]
 }
