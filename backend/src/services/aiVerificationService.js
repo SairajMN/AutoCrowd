@@ -23,11 +23,17 @@ class AIVerificationService {
 
   async initialize() {
     logger.info('Initializing AI Verification Service...');
-    
+    logger.info(`ASI API Key configured: ${this.asiApiKey ? 'YES' : 'NO'}`);
+    logger.info(`ASI Endpoint: ${this.asiEndpoint}`);
+    logger.info(`MeTTa URL: ${this.mettaUrl}`);
+    logger.info(`AgentVerse URL: ${this.agentVerseUrl}`);
+
     if (!this.asiApiKey) {
       logger.warn('ASI_API_KEY not provided, using mock verification for development');
+    } else {
+      logger.info('ASI API key is configured - will use real ASI APIs for verification');
     }
-    
+
     logger.info('AI Verification Service initialized');
   }
 
@@ -43,7 +49,7 @@ class AIVerificationService {
    */
   async verifyMilestone(submission) {
     logger.info(`Starting AI verification for milestone ${submission.milestoneId}`);
-    
+
     try {
       // If no ASI API key, use mock verification for development
       if (!this.asiApiKey) {
@@ -52,23 +58,23 @@ class AIVerificationService {
 
       // Analyze evidence using MeTTa knowledge graph
       const evidenceAnalysis = await this.analyzeEvidence(submission);
-      
+
       // Get ASI agent verdict
       const agentVerdict = await this.getAgentVerdict(submission, evidenceAnalysis);
-      
+
       // Combine results
       const finalResult = this.combineResults(evidenceAnalysis, agentVerdict);
-      
+
       logger.info(`AI verification completed for milestone ${submission.milestoneId}`, {
         verdict: finalResult.verdict,
         confidence: finalResult.confidence
       });
-      
+
       return finalResult;
-      
+
     } catch (error) {
       logger.error(`AI verification failed for milestone ${submission.milestoneId}:`, error);
-      
+
       // Return uncertain verdict on error
       return {
         verdict: 'uncertain',
@@ -85,7 +91,7 @@ class AIVerificationService {
   async analyzeEvidence(submission) {
     try {
       logger.info(`Analyzing evidence for milestone ${submission.milestoneId}`);
-      
+
       const analysisRequest = {
         evidence_hash: submission.evidenceHash,
         evidence_url: submission.evidenceUrl,
@@ -112,7 +118,7 @@ class AIVerificationService {
         authenticity: response.data.authenticity || 0.5,
         reasoning: response.data.reasoning || 'Evidence analysis completed'
       };
-      
+
     } catch (error) {
       logger.error('Evidence analysis failed:', error);
       return {
@@ -130,7 +136,7 @@ class AIVerificationService {
   async getAgentVerdict(submission, evidenceAnalysis) {
     try {
       logger.info(`Getting ASI agent verdict for milestone ${submission.milestoneId}`);
-      
+
       const agentRequest = {
         task: 'milestone_verification',
         context: {
@@ -162,7 +168,7 @@ class AIVerificationService {
         reasoning: response.data.reasoning || 'ASI agent analysis completed',
         recommendations: response.data.recommendations || []
       };
-      
+
     } catch (error) {
       logger.error('ASI agent verdict failed:', error);
       return {
@@ -219,15 +225,15 @@ class AIVerificationService {
    */
   async mockVerification(submission) {
     logger.info(`Using mock verification for milestone ${submission.milestoneId}`);
-    
+
     // Simulate processing time
     await new Promise(resolve => setTimeout(resolve, 2000));
-    
+
     // Mock logic based on evidence hash
     const hash = submission.evidenceHash;
     const hashSum = hash.split('').reduce((sum, char) => sum + char.charCodeAt(0), 0);
     const mockConfidence = (hashSum % 100) / 100;
-    
+
     let verdict;
     if (mockConfidence >= 0.8) {
       verdict = 'approved';
@@ -261,10 +267,10 @@ class AIVerificationService {
       return await this.verifyMilestone(submission);
     } catch (error) {
       logger.warn(`Verification attempt ${attempt} failed:`, error.message);
-      
+
       const delay = Math.pow(2, attempt) * 1000; // Exponential backoff
       await new Promise(resolve => setTimeout(resolve, delay));
-      
+
       return this.retryVerification(submission, attempt + 1);
     }
   }
