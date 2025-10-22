@@ -1,7 +1,8 @@
 {
   "version": 2,
-  "framework": null,
-  "buildCommand": "npm run build --filter=frontend",
+  "framework": "nextjs",
+  "rootDirectory": "frontend",
+  "outputDirectory": ".next",
   "installCommand": "npm install",
   "env": {
     "NODE_ENV": "production"
