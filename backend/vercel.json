@@ -1,25 +1,27 @@
 {
-  "version": 2,
-  "builds": [
-    {
-      "src": "src/index.js",
-      "use": "@vercel/node"
+    "version": 2,
+    "builds": [
+        {
+            "src": "src/index.js",
+            "use": "@vercel/node"
+        }
+    ],
+    "functions": {
+        "src/index.js": {
+            "maxDuration": 30,
+            "memory": 1024
+        }
+    },
+    "routes": [
+        {
+            "src": "/(.*)",
+            "dest": "/src/index.js"
+        }
+    ],
+    "regions": [
+        "sin1"
+    ],
+    "env": {
+        "NODE_ENV": "production"
     }
-  ],
-  "routes": [
-    {
-      "src": "/(.*)",
-      "dest": "/src/index.js"
-    }
-  ],
-  "functions": {
-    "src/index.js": {
-      "maxDuration": 30,
-      "memory": 1024
-    }
-  },
-  "regions": ["sin1"],
-  "env": {
-    "NODE_ENV": "production"
-  }
 }
