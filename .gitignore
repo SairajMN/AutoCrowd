@@ -191,6 +191,8 @@ scratch/
 *.p12
 *.pfx
 
-# Hardhat
 artifacts/
+# Ignore root-level .vercel folder, but allow the one inside frontend
+!frontend/.vercel
 .vercel
+
