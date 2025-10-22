@@ -8,14 +8,34 @@ export interface VerificationRequest {
     evidenceUrl?: string;
 }
 
+export interface ScamDetectionResult {
+    campaignCreatorRisk: number;
+    overallScamRisk: number;
+    riskLevel: string;
+    suggestions: string[];
+    riskFactors: {
+        multipleCampaignCreator: boolean;
+        immediateWithdrawals: boolean;
+        selfContribution: boolean;
+        unusualTiming: boolean;
+        overfundedCampaign: boolean;
+    };
+    warning?: string;
+}
+
 export interface VerificationResult {
     milestoneId: string;
     campaignAddress: string;
-    verdict: 'approved' | 'rejected' | 'pending';
+    verdict: 'approved' | 'rejected' | 'pending' | 'uncertain';
     confidence: number;
     reasoning: string;
     timestamp: string;
     aiReportHash?: string;
+    scamDetection?: ScamDetectionResult;
+    realtimeData?: {
+        freshness: string;
+        dataSourcesUsed: string[];
+    };
 }
 
 export interface VerificationStatus {

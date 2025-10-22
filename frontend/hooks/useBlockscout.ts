@@ -17,6 +17,15 @@ export interface ActivityItem {
     description: string;
 }
 
+export interface ContributorInfo {
+    address: string;
+    totalContributed: string;
+    contributionCount: number;
+    firstContribution: string;
+    lastContribution: string;
+    averageContribution: string;
+}
+
 export interface CampaignAnalytics {
     totalTransactions: number;
     totalVolume: string;
@@ -33,6 +42,8 @@ export function useBlockscout(campaignAddress: string) {
     const [error, setError] = useState<string | null>(null);
     const [activity, setActivity] = useState<ActivityItem[]>([]);
     const [analytics, setAnalytics] = useState<CampaignAnalytics | null>(null);
+    const [contributors, setContributors] = useState<ContributorInfo[]>([]);
+    const [contributorsLoading, setContributorsLoading] = useState(false);
 
     /**
      * Load campaign analytics and activity data
@@ -169,6 +180,58 @@ export function useBlockscout(campaignAddress: string) {
     }, [campaignAddress, activity]);
 
     /**
+     * Load detailed contributor information
+     */
+    const loadContributors = useCallback(async () => {
+        if (!campaignAddress) return;
+
+        setContributorsLoading(true);
+
+        try {
+            // Get recent transactions for the campaign
+            const transactions = await blockscoutClient.getAccountTransactions(campaignAddress, 1, 50);
+
+            // Group contributions by address (excluding contract interactions)
+            const contributionsByAddress: { [address: string]: { txs: any[], total: number } } = {};
+
+            transactions.forEach(tx => {
+                if (tx.value && tx.value !== '0' && tx.from && tx.from !== campaignAddress.toLowerCase()) {
+                    const address = tx.from.toLowerCase();
+                    if (!contributionsByAddress[address]) {
+                        contributionsByAddress[address] = { txs: [], total: 0 };
+                    }
+                    contributionsByAddress[address].txs.push(tx);
+                    contributionsByAddress[address].total += parseFloat(tx.value) / 1e6; // Convert to PYUSD
+                }
+            });
+
+            // Convert to ContributorInfo array
+            const contributorsData: ContributorInfo[] = Object.entries(contributionsByAddress).map(([address, data]) => {
+                const timestamps = data.txs.map(tx => new Date(tx.timestamp).getTime());
+                const sortedTimestamps = timestamps.sort((a, b) => a - b);
+
+                return {
+                    address,
+                    totalContributed: data.total.toFixed(2),
+                    contributionCount: data.txs.length,
+                    firstContribution: new Date(sortedTimestamps[0]).toISOString(),
+                    lastContribution: new Date(sortedTimestamps[sortedTimestamps.length - 1]).toISOString(),
+                    averageContribution: (data.total / data.txs.length).toFixed(2)
+                };
+            });
+
+            // Sort by total contributed (highest first)
+            contributorsData.sort((a, b) => parseFloat(b.totalContributed) - parseFloat(a.totalContributed));
+
+            setContributors(contributorsData);
+        } catch (err) {
+            console.error('Error loading contributors:', err);
+        } finally {
+            setContributorsLoading(false);
+        }
+    }, [campaignAddress]);
+
+    /**
      * Get contributor analytics
      */
     const getContributorAnalytics = useCallback(async (address: string) => {
@@ -193,17 +256,21 @@ export function useBlockscout(campaignAddress: string) {
         }
     }, [campaignAddress]);
 
-    // Load analytics on mount and when campaign address changes
+    // Load analytics and contributors on mount and when campaign address changes
     useEffect(() => {
         loadCampaignAnalytics();
-    }, [loadCampaignAnalytics]);
+        loadContributors();
+    }, [loadCampaignAnalytics, loadContributors]);
 
     return {
         activity,
         analytics,
+        contributors,
+        contributorsLoading,
         isLoading,
         error,
         loadCampaignAnalytics,
+        loadContributors,
         getTransactionDetails,
         getContractVerificationStatus,
         startTransactionMonitoring,

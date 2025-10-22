@@ -22,7 +22,13 @@ enum MilestoneState {
 
 export function CampaignDetail({ campaignAddress }: CampaignDetailProps) {
     const { getCampaignDetails, contribute, isConnected, address, getPYUSDBalance, submitMilestone, claimRefund, isProviderReady } = useWeb3();
-    const { activity: blockscoutActivity, analytics: blockscoutAnalytics, isLoading: blockscoutLoading } = useBlockscout(campaignAddress);
+    const {
+        activity: blockscoutActivity,
+        analytics: blockscoutAnalytics,
+        contributors,
+        contributorsLoading,
+        isLoading: blockscoutLoading
+    } = useBlockscout(campaignAddress);
     const { requestVerification, isVerifying } = useAIVerification();
 
     // Helper function for PYUSD formatting using proper utilities
@@ -38,6 +44,7 @@ export function CampaignDetail({ campaignAddress }: CampaignDetailProps) {
     const [transactionLoading, setTransactionLoading] = useState(false);
     const [milestoneReviewHash, setMilestoneReviewHash] = useState('');
     const [selectedMilestone, setSelectedMilestone] = useState<number | null>(null);
+    const [activeTab, setActiveTab] = useState<'overview' | 'milestones' | 'contributors'>('overview');
 
     const loadCampaignDetails = useCallback(async () => {
         try {
@@ -246,98 +253,290 @@ export function CampaignDetail({ campaignAddress }: CampaignDetailProps) {
                 )}
             </div>
 
-            {/* Milestones */}
+            {/* Tab Navigation */}
             <div className="bg-white rounded-lg shadow p-6 mb-6">
-                <h2 className="text-2xl font-bold text-gray-900 mb-6">Milestones</h2>
-                <div className="space-y-4">
-                    {campaign.milestones.map((milestone, index) => (
-                        <div key={index} className="border rounded-lg p-4">
-                            <div className="flex justify-between items-start mb-3">
-                                <div className="flex-1">
-                                    <h3 className="font-semibold text-gray-900">Milestone {index + 1}</h3>
-                                    <p className="text-gray-600 text-sm mt-1">{milestone.description}</p>
-                                </div>
-                                <div className="text-right">
-                                    <span className={`px-2 py-1 rounded text-xs font-medium ${getMilestoneStateColor(milestone.state)}`}>
-                                        {getMilestoneStateText(milestone.state)}
-                                    </span>
-                                    <p className="text-sm text-gray-500 mt-1">{formatPYUSD(milestone.amount)} PYUSD</p>
-                                </div>
-                            </div>
-
-                            {/* Creator Actions */}
-                            {isCreator && milestone.state === MilestoneState.Pending && (
-                                <div className="border-t pt-3 mt-3">
-                                    <div className="flex gap-2">
-                                        <button
-                                            onClick={() => setSelectedMilestone(index)}
-                                            className="px-4 py-2 bg-green-600 text-white text-sm rounded hover:bg-green-700"
-                                        >
-                                            Submit Milestone
-                                        </button>
-                                        <button
-                                            onClick={async () => {
-                                                if (!milestone.evidenceHash) return;
-                                                try {
-                                                    const result = await requestVerification({
-                                                        milestoneId: index.toString(),
-                                                        campaignAddress: campaignAddress,
-                                                        description: milestone.description,
-                                                        evidenceHash: milestone.evidenceHash || ''
-                                                    });
-                                                    if (result) {
-                                                        alert(`AI Verification: ${result.verdict} (${Math.round(result.confidence * 100)}% confidence)`);
-                                                        await loadCampaignDetails(); // Refresh data
-                                                    }
-                                                } catch (error) {
-                                                    alert('AI verification failed: ' + (error as Error).message);
-                                                }
-                                            }}
-                                            disabled={isVerifying || !milestone.evidenceHash}
-                                            className="px-4 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 disabled:opacity-50"
-                                        >
-                                            {isVerifying ? 'Verifying...' : 'AI Verify'}
-                                        </button>
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* AI Confidence Display */}
-                            {milestone.state === MilestoneState.Submitted && milestone.confidence !== undefined && (
-                                <div className="border-t pt-3 mt-3">
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-sm font-medium">AI Confidence:</span>
-                                        <span className={`px-2 py-1 rounded text-xs font-medium ${milestone.confidence > 0.8 ? 'bg-green-100 text-green-800' :
-                                            milestone.confidence > 0.6 ? 'bg-yellow-100 text-yellow-800' :
-                                                'bg-red-100 text-red-800'
-                                            }`}>
-                                            {Math.round(milestone.confidence * 100)}%
-                                        </span>
-                                    </div>
-                                    {milestone.reasoning && (
-                                        <p className="text-sm text-gray-600 mt-2 italic">
-                                            AI Analysis: {milestone.reasoning}
-                                        </p>
-                                    )}
-                                </div>
-                            )}
-
-                            {/* Milestone Chat for all users */}
-                            <div className="border-t pt-3 mt-3">
-                                <MilestoneChat
-                                    milestoneId={index.toString()}
-                                    campaignAddress={campaignAddress}
-                                    description={milestone.description}
-                                    evidenceHash={milestone.evidenceHash}
-                                    onVerificationResult={(result) => {
-                                        console.log('AI verification result:', result);
-                                        loadCampaignDetails(); // Refresh after AI verification
-                                    }}
-                                />
-                            </div>
-                        </div>
-                    ))}
+                <div className="border-b border-gray-200 mb-6">
+                    <nav className="-mb-px flex space-x-8">
+                        <button
+                            onClick={() => setActiveTab('overview')}
+                            className={`py-2 px-1 border-b-2 font-medium text-sm ${activeTab === 'overview'
+                                    ? 'border-blue-500 text-blue-600'
+                                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                                }`}
+                        >
+                            Overview
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('milestones')}
+                            className={`py-2 px-1 border-b-2 font-medium text-sm ${activeTab === 'milestones'
+                                    ? 'border-blue-500 text-blue-600'
+                                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                                }`}
+                        >
+                            Milestones
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('contributors')}
+                            className={`py-2 px-1 border-b-2 font-medium text-sm ${activeTab === 'contributors'
+                                    ? 'border-blue-500 text-blue-600'
+                                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                                }`}
+                        >
+                            Contributors
+                        </button>
+                    </nav>
                 </div>
+
+                {/* Tab Content */}
+                {activeTab === 'overview' && (
+                    <div>
+                        <h2 className="text-2xl font-bold text-gray-900 mb-6">Overview</h2>
+                        <div className="space-y-6">
+                            {/* Campaign Summary */}
+                            <div className="grid md:grid-cols-2 gap-6">
+                                <div className="border rounded-lg p-4">
+                                    <h3 className="font-semibold text-lg mb-3">Campaign Details</h3>
+                                    <dl className="space-y-2">
+                                        <div className="flex justify-between">
+                                            <dt className="text-sm text-gray-500">Status:</dt>
+                                            <dd className={`px-2 py-1 rounded text-xs font-medium ${campaign.isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                                                {campaign.isActive ? 'Active' : 'Completed'}
+                                            </dd>
+                                        </div>
+                                        <div className="flex justify-between">
+                                            <dt className="text-sm text-gray-500">Contributors:</dt>
+                                            <dd className="text-sm font-medium">{campaign.backersCount}</dd>
+                                        </div>
+                                        <div className="flex justify-between">
+                                            <dt className="text-sm text-gray-500">Funds Raised:</dt>
+                                            <dd className="text-sm font-medium">{formatPYUSD(campaign.totalRaised)} PYUSD</dd>
+                                        </div>
+                                        <div className="flex justify-between">
+                                            <dt className="text-sm text-gray-500">Goal:</dt>
+                                            <dd className="text-sm font-medium">{formatPYUSD(campaign.totalGoal)} PYUSD</dd>
+                                        </div>
+                                        <div className="flex justify-between">
+                                            <dt className="text-sm text-gray-500">Progress:</dt>
+                                            <dd className="text-sm font-medium">
+                                                {Math.min(100, Number((campaign.totalRaised * 100n) / campaign.totalGoal)).toFixed(1)}%
+                                            </dd>
+                                        </div>
+                                    </dl>
+                                </div>
+                                <div className="border rounded-lg p-4">
+                                    <h3 className="font-semibold text-lg mb-3">AI Risk Assessment</h3>
+                                    <p className="text-sm text-gray-600 mb-3">
+                                        Real-time scam detection analyzes campaign behavior and contributor patterns.
+                                    </p>
+                                    <button
+                                        onClick={async () => {
+                                            try {
+                                                const result = await requestVerification({
+                                                    milestoneId: 'risk_assessment',
+                                                    campaignAddress: campaignAddress,
+                                                    description: campaign.description,
+                                                    evidenceHash: 'risk_check'
+                                                });
+                                                if (result && result.scamDetection) {
+                                                    const risk = result.scamDetection.overallScamRisk;
+                                                    const level = risk > 0.7 ? 'HIGH' : risk > 0.4 ? 'MEDIUM' : 'LOW';
+                                                    alert(`Campaign Risk Assessment: ${level} (${Math.round(risk * 100)}%)\n\n${result.scamDetection.warning || 'No major issues detected'}`);
+                                                }
+                                            } catch (error) {
+                                                alert('Risk assessment failed: ' + (error as Error).message);
+                                            }
+                                        }}
+                                        disabled={isVerifying}
+                                        className="px-4 py-2 bg-purple-600 text-white text-sm rounded hover:bg-purple-700 disabled:opacity-50"
+                                    >
+                                        {isVerifying ? 'Assessing...' : 'Check Scam Risk'}
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Recent Activity Summary */}
+                            {blockscoutAnalytics && (
+                                <div className="border rounded-lg p-4">
+                                    <h3 className="font-semibold text-lg mb-3">Recent Activity</h3>
+                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                                        <div>
+                                            <span className="font-medium">Transactions:</span>
+                                            <p className="text-2xl font-bold text-blue-600">{blockscoutAnalytics.totalTransactions}</p>
+                                        </div>
+                                        <div>
+                                            <span className="font-medium">Volume:</span>
+                                            <p className="text-2xl font-bold text-green-600">{blockscoutAnalytics.totalVolume} PYUSD</p>
+                                        </div>
+                                        <div>
+                                            <span className="font-medium">Contributors:</span>
+                                            <p className="text-2xl font-bold text-purple-600">{blockscoutAnalytics.uniqueContributors}</p>
+                                        </div>
+                                        <div>
+                                            <span className="font-medium">Verified:</span>
+                                            <p className="text-2xl font-bold text-green-600">✓</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                )}
+
+                {activeTab === 'milestones' && (
+                    <div>
+                        <h2 className="text-2xl font-bold text-gray-900 mb-6">Milestones</h2>
+                        <div className="space-y-4">
+                            {campaign.milestones.map((milestone, index) => (
+                                <div key={index} className="border rounded-lg p-4">
+                                    <div className="flex justify-between items-start mb-3">
+                                        <div className="flex-1">
+                                            <h3 className="font-semibold text-gray-900">Milestone {index + 1}</h3>
+                                            <p className="text-gray-600 text-sm mt-1">{milestone.description}</p>
+                                        </div>
+                                        <div className="text-right">
+                                            <span className={`px-2 py-1 rounded text-xs font-medium ${getMilestoneStateColor(milestone.state)}`}>
+                                                {getMilestoneStateText(milestone.state)}
+                                            </span>
+                                            <p className="text-sm text-gray-500 mt-1">{formatPYUSD(milestone.amount)} PYUSD</p>
+                                        </div>
+                                    </div>
+
+                                    {/* Creator Actions */}
+                                    {isCreator && milestone.state === MilestoneState.Pending && (
+                                        <div className="border-t pt-3 mt-3">
+                                            <div className="flex gap-2">
+                                                <button
+                                                    onClick={() => setSelectedMilestone(index)}
+                                                    className="px-4 py-2 bg-green-600 text-white text-sm rounded hover:bg-green-700"
+                                                >
+                                                    Submit Milestone
+                                                </button>
+                                                <button
+                                                    onClick={async () => {
+                                                        if (!milestone.evidenceHash) return;
+                                                        try {
+                                                            const result = await requestVerification({
+                                                                milestoneId: index.toString(),
+                                                                campaignAddress: campaignAddress,
+                                                                description: milestone.description,
+                                                                evidenceHash: milestone.evidenceHash || ''
+                                                            });
+                                                            if (result) {
+                                                                alert(`AI Verification: ${result.verdict} (${Math.round(result.confidence * 100)}% confidence)`);
+                                                                await loadCampaignDetails(); // Refresh data
+                                                            }
+                                                        } catch (error) {
+                                                            alert('AI verification failed: ' + (error as Error).message);
+                                                        }
+                                                    }}
+                                                    disabled={isVerifying || !milestone.evidenceHash}
+                                                    className="px-4 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 disabled:opacity-50"
+                                                >
+                                                    {isVerifying ? 'Verifying...' : 'AI Verify'}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* AI Confidence Display */}
+                                    {milestone.state === MilestoneState.Submitted && milestone.confidence !== undefined && (
+                                        <div className="border-t pt-3 mt-3">
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-sm font-medium">AI Confidence:</span>
+                                                <span className={`px-2 py-1 rounded text-xs font-medium ${milestone.confidence > 0.8 ? 'bg-green-100 text-green-800' :
+                                                    milestone.confidence > 0.6 ? 'bg-yellow-100 text-yellow-800' :
+                                                        'bg-red-100 text-red-800'
+                                                    }`}>
+                                                    {Math.round(milestone.confidence * 100)}%
+                                                </span>
+                                            </div>
+                                            {milestone.reasoning && (
+                                                <p className="text-sm text-gray-600 mt-2 italic">
+                                                    AI Analysis: {milestone.reasoning}
+                                                </p>
+                                            )}
+                                        </div>
+                                    )}
+
+                                    {/* Milestone Chat for all users */}
+                                    <div className="border-t pt-3 mt-3">
+                                        <MilestoneChat
+                                            milestoneId={index.toString()}
+                                            campaignAddress={campaignAddress}
+                                            description={milestone.description}
+                                            evidenceHash={milestone.evidenceHash}
+                                            onVerificationResult={(result) => {
+                                                console.log('AI verification result:', result);
+                                                loadCampaignDetails(); // Refresh after AI verification
+                                            }}
+                                        />
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {activeTab === 'contributors' && (
+                    <div>
+                        <h2 className="text-2xl font-bold text-gray-900 mb-6">Contributors</h2>
+                        {contributorsLoading ? (
+                            <div className="text-center py-8">
+                                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+                                <p className="text-gray-600 mt-2">Loading contributor data...</p>
+                            </div>
+                        ) : contributors.length > 0 ? (
+                            <div className="space-y-3">
+                                {contributors.map((contributor, index) => (
+                                    <div key={index} className="flex items-center gap-4 p-4 border rounded-lg hover:bg-gray-50">
+                                        <div className="flex-shrink-0">
+                                            <div className="w-10 h-10 bg-gradient-to-r from-blue-400 to-purple-600 rounded-full flex items-center justify-center text-white font-bold text-sm">
+                                                #{index + 1}
+                                            </div>
+                                        </div>
+                                        <div className="flex-1">
+                                            <div className="flex items-center gap-2 mb-1">
+                                                <span className="font-mono text-sm text-gray-900">
+                                                    {contributor.address.slice(0, 6)}...{contributor.address.slice(-4)}
+                                                </span>
+                                                <button
+                                                    onClick={() => navigator.clipboard.writeText(contributor.address)}
+                                                    className="text-gray-400 hover:text-gray-600 text-xs"
+                                                    title="Copy address"
+                                                >
+                                                    📋
+                                                </button>
+                                                <a
+                                                    href={`${NETWORK_CONFIG.blockExplorer}/address/${contributor.address}`}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="text-blue-500 hover:text-blue-700 text-xs"
+                                                >
+                                                    ↗
+                                                </a>
+                                            </div>
+                                        </div>
+                                        <div className="text-right">
+                                            <div className="text-lg font-bold text-green-600 mb-1">
+                                                {contributor.totalContributed} PYUSD
+                                            </div>
+                                            <div className="text-sm text-gray-600">
+                                                {contributor.contributionCount} contributions
+                                                <br />
+                                                <span className="text-xs">Avg: {contributor.averageContribution} PYUSD</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            <div className="text-center py-8 text-gray-500">
+                                <p>No contributors found yet.</p>
+                                <p className="text-sm mt-1">Contributors will appear here as people fund this campaign.</p>
+                            </div>
+                        )}
+                    </div>
+                )}
             </div>
 
             {/* Submit Milestone Modal */}
