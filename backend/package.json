@@ -23,7 +23,8 @@
     "redis": "^4.6.10",
     "uuid": "^9.0.1",
     "web3": "^4.2.0",
-    "winston": "^3.18.3"
+    "winston": "^3.18.3",
+    "ws": "^8.14.0"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",

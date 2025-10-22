@@ -11,6 +11,7 @@ dotenv.config();
 const aiVerificationService = require('./services/aiVerificationService');
 const blockchainService = require('./services/blockchainService');
 const eventListenerService = require('./services/eventListenerService');
+const realtimeDataService = require('./services/realtimeDataService');
 
 // Configure logging
 const logger = winston.createLogger({
@@ -60,8 +61,8 @@ app.use('/api/', limiter);
 
 // Health check endpoint
 app.get('/health', (req, res) => {
-  res.json({ 
-    status: 'healthy', 
+  res.json({
+    status: 'healthy',
     timestamp: new Date().toISOString(),
     version: '1.0.0'
   });
@@ -71,11 +72,12 @@ app.get('/health', (req, res) => {
 app.use('/api/verification', require('./routes/verification'));
 app.use('/api/campaigns', require('./routes/campaigns'));
 app.use('/api/events', require('./routes/events'));
+app.use('/api/realtime', require('./routes/realtime'));
 
 // Error handling middleware
 app.use((err, req, res, next) => {
   logger.error('Unhandled error:', err);
-  res.status(500).json({ 
+  res.status(500).json({
     error: 'Internal server error',
     message: process.env.NODE_ENV === 'development' ? err.message : 'Something went wrong'
   });
@@ -90,19 +92,19 @@ app.use('*', (req, res) => {
 async function initializeServices() {
   try {
     logger.info('Initializing AutoCrowd backend services...');
-    
+
     // Initialize blockchain service
     await blockchainService.initialize();
     logger.info('Blockchain service initialized');
-    
+
     // Initialize AI verification service
     await aiVerificationService.initialize();
     logger.info('AI verification service initialized');
-    
+
     // Start event listener service
     await eventListenerService.start();
     logger.info('Event listener service started');
-    
+
     logger.info('All services initialized successfully');
   } catch (error) {
     logger.error('Failed to initialize services:', error);
@@ -114,11 +116,16 @@ async function initializeServices() {
 async function startServer() {
   try {
     await initializeServices();
-    
-    app.listen(PORT, () => {
+
+    const server = app.listen(PORT, () => {
       logger.info(`AutoCrowd backend server running on port ${PORT}`);
       logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
     });
+
+    // Initialize real-time data service with the HTTP server
+    await realtimeDataService.initialize(server);
+    logger.info('Real-time data service initialized with WebSocket support');
+
   } catch (error) {
     logger.error('Failed to start server:', error);
     process.exit(1);
@@ -126,15 +133,34 @@ async function startServer() {
 }
 
 // Graceful shutdown
-process.on('SIGTERM', () => {
-  logger.info('SIGTERM received, shutting down gracefully');
-  process.exit(0);
-});
+async function gracefulShutdown(signal) {
+  logger.info(`${signal} received, shutting down gracefully`);
 
-process.on('SIGINT', () => {
-  logger.info('SIGINT received, shutting down gracefully');
-  process.exit(0);
-});
+  try {
+    // Stop services in reverse order
+    await eventListenerService.stop();
+    logger.info('Event listener service stopped');
+
+    await aiVerificationService.stopRealtimeServices();
+    logger.info('AI verification real-time services stopped');
+
+    await realtimeDataService.shutdown();
+    logger.info('Real-time data service stopped');
+
+    // Add small delay to allow WebSocket connections to close gracefully
+    setTimeout(() => {
+      logger.info('All services stopped, exiting');
+      process.exit(0);
+    }, 2000);
+
+  } catch (error) {
+    logger.error('Error during graceful shutdown:', error);
+    process.exit(1);
+  }
+}
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
 // Start the server
 startServer();
