@@ -397,6 +397,125 @@ router.post('/scam-detection', async (req, res) => {
 });
 
 /**
+ * GET /api/verification/contributors/:campaignAddress
+ * Get verified contributor data for a campaign with Blockscout and ASI verification
+ */
+router.get('/contributors/:campaignAddress', async (req, res) => {
+  try {
+    const { campaignAddress } = req.params;
+    const { startIndex = 0, limit = 50, verifyBlockscout = true, checkScam = true } = req.query;
+
+    // Validate campaign address
+    if (!campaignAddress || !/^0x[a-fA-F0-9]{40}$/.test(campaignAddress)) {
+      return res.status(400).json({
+        error: 'Invalid campaign address format'
+      });
+    }
+
+    logger.info(`Fetching verified contributors for campaign ${campaignAddress}`);
+
+    // Get contributor data from blockchain with ASI verification
+    const verifiedContributors = await blockchainService.getVerifiedContributors(
+      campaignAddress,
+      parseInt(startIndex),
+      parseInt(limit),
+      verifyBlockscout === 'true',
+      checkScam === 'true'
+    );
+
+    res.json({
+      success: true,
+      data: {
+        campaignAddress,
+        totalContributors: verifiedContributors.length,
+        contributors: verifiedContributors.map(contributor => ({
+          address: contributor.address,
+          totalContributed: contributor.totalContributed,
+          contributionCount: contributor.contributionCount,
+          firstContribution: contributor.firstContribution,
+          lastContribution: contributor.lastContribution,
+          verificationStatus: contributor.verificationStatus,
+          scamRiskScore: contributor.scamRiskScore,
+          blockscoutVerified: contributor.blockscoutVerified,
+          riskFactors: contributor.riskFactors,
+          asiVerifiedAt: contributor.asiVerifiedAt
+        })),
+        metadata: {
+          requestedRange: { startIndex: parseInt(startIndex), limit: parseInt(limit) },
+          blockscoutVerification: verifyBlockscout === 'true',
+          scamDetection: checkScam === 'true',
+          timestamp: new Date().toISOString()
+        }
+      }
+    });
+
+  } catch (error) {
+    logger.error('Failed to get verified contributors:', error);
+    res.status(500).json({
+      error: 'Failed to fetch verified contributors',
+      message: error.message
+    });
+  }
+});
+
+/**
+ * GET /api/verification/contributor/:campaignAddress/:contributorAddress
+ * Get detailed verification info for a specific contributor
+ */
+router.get('/contributor/:campaignAddress/:contributorAddress', async (req, res) => {
+  try {
+    const { campaignAddress, contributorAddress } = req.params;
+    const { enhanceWithRealtime = true } = req.query;
+
+    // Validate addresses
+    if (!campaignAddress || !/^0x[a-fA-F0-9]{40}$/.test(campaignAddress)) {
+      return res.status(400).json({ error: 'Invalid campaign address format' });
+    }
+    if (!contributorAddress || !/^0x[a-fA-F0-9]{40}$/.test(contributorAddress)) {
+      return res.status(400).json({ error: 'Invalid contributor address format' });
+    }
+
+    logger.info(`Getting detailed verification for contributor ${contributorAddress} in campaign ${campaignAddress}`);
+
+    // Get detailed contributor verification
+    const contributorDetails = await blockchainService.getDetailedContributorVerification(
+      campaignAddress,
+      contributorAddress,
+      enhanceWithRealtime === 'true'
+    );
+
+    if (!contributorDetails) {
+      return res.status(404).json({
+        error: 'Contributor not found in campaign'
+      });
+    }
+
+    res.json({
+      success: true,
+      data: {
+        campaignAddress,
+        contributor: contributorDetails,
+        verification: {
+          blockscoutStatus: contributorDetails.blockscoutVerified ? 'VERIFIED' : 'UNVERIFIED',
+          scamDetectionStatus: contributorDetails.scamRiskScore < 0.3 ? 'SAFE' :
+            contributorDetails.scamRiskScore < 0.6 ? 'MONITOR' : 'HIGH_RISK',
+          confidenceLevel: contributorDetails.confidenceLevel,
+          lastVerified: contributorDetails.asiVerifiedAt
+        },
+        timestamp: new Date().toISOString()
+      }
+    });
+
+  } catch (error) {
+    logger.error('Failed to get contributor details:', error);
+    res.status(500).json({
+      error: 'Failed to fetch contributor details',
+      message: error.message
+    });
+  }
+});
+
+/**
  * GET /api/verification/health
  * Health check for verification service
  */
@@ -408,6 +527,7 @@ router.get('/health', async (req, res) => {
       services: {
         aiVerification: 'operational',
         blockchain: 'operational',
+        contributorVerification: 'active',
         scamDetection: 'active'
       }
     };

@@ -278,4 +278,75 @@ contract AICrowdfundingCampaign is Ownable, ReentrancyGuard {
     function backersCount() external view returns (uint256) {
         return backers.length;
     }
+
+    /**
+     * @dev Get batch of backers with their contribution details
+     * @param _startIndex Starting index in backers array
+     * @param _count Number of backers to retrieve
+     * @return backerAddresses Array of backer addresses
+     * @return contributionAmounts Array of corresponding contribution amounts
+     * @return hasMore Boolean indicating if more backers exist
+     */
+    function getBackersBatch(uint256 _startIndex, uint256 _count)
+        external
+        view
+        returns (
+            address[] memory backerAddresses,
+            uint256[] memory contributionAmounts,
+            bool hasMore
+        )
+    {
+        require(_startIndex < backers.length, "Invalid start index");
+
+        uint256 endIndex = _startIndex + _count;
+        if (endIndex > backers.length) {
+            endIndex = backers.length;
+        }
+
+        uint256 actualCount = endIndex - _startIndex;
+
+        backerAddresses = new address[](actualCount);
+        contributionAmounts = new uint256[](actualCount);
+
+        for (uint256 i = 0; i < actualCount; i++) {
+            address backer = backers[_startIndex + i];
+            backerAddresses[i] = backer;
+            contributionAmounts[i] = contributions[backer];
+        }
+
+        hasMore = endIndex < backers.length;
+
+        return (backerAddresses, contributionAmounts, hasMore);
+    }
+
+    /**
+     * @dev Get contributor summary statistics
+     * @return totalContributors Total number of contributors
+     * @return totalAmount Total PYUSD contributed
+     * @return avgContribution Average contribution per backer
+     * @return lastContributionTime Timestamp of last contribution
+     */
+    function getContributorSummary()
+        external
+        view
+        returns (
+            uint256 totalContributors,
+            uint256 totalAmount,
+            uint256 avgContribution,
+            uint256 lastContributionTime
+        )
+    {
+        totalContributors = backers.length;
+        totalAmount = campaignInfo.totalRaised;
+
+        if (totalContributors > 0) {
+            avgContribution = totalAmount / totalContributors;
+        }
+
+        // Note: This would need to be tracked as a state variable in production
+        // For now, return current time as approximation
+        lastContributionTime = block.timestamp;
+
+        return (totalContributors, totalAmount, avgContribution, lastContributionTime);
+    }
 }

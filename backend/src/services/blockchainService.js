@@ -310,6 +310,375 @@ class BlockchainService {
             logger.info('Stopped listening for blockchain events');
         }
     }
+
+    /**
+     * Get verified contributors for a campaign with Blockscout and ASI verification
+     */
+    async getVerifiedContributors(campaignAddress, startIndex = 0, limit = 50, verifyBlockscout = true, checkScam = true) {
+        try {
+            logger.info(`Getting verified contributors for campaign ${campaignAddress}`);
+
+            // Initialize campaign contract
+            const campaignABI = [
+                "function backers(uint256) view returns (address)",
+                "function backersCount() view returns (uint256)",
+                "function contributions(address) view returns (uint256)",
+                "function isBacker(address) view returns (bool)",
+                "function campaignInfo() view returns (string title, string description, uint256 totalGoal, uint256 totalRaised, uint256 startTime, uint256 endTime, address creator, bool isActive, uint256 milestoneCount)"
+            ];
+
+            const campaignContract = new ethers.Contract(campaignAddress, campaignABI, this.provider);
+
+            // Get backers count
+            const backersCount = await campaignContract.backersCount();
+            logger.info(`Campaign has ${backersCount} backers`);
+
+            // Get backers in batches
+            const endIndex = Math.min(startIndex + limit, parseInt(backersCount));
+            const contributors = [];
+
+            for (let i = startIndex; i < endIndex; i++) {
+                try {
+                    const backerAddress = await campaignContract.backers(i);
+                    const contributionAmount = await campaignContract.contributions(backerAddress);
+
+                    if (parseInt(contributionAmount) > 0) {
+                        const contributorData = await this.verifyContributor(
+                            campaignAddress,
+                            backerAddress,
+                            contributionAmount,
+                            verifyBlockscout,
+                            checkScam
+                        );
+
+                        contributors.push(contributorData);
+                    }
+                } catch (error) {
+                    logger.warn(`Failed to process backer at index ${i}:`, error.message);
+                }
+            }
+
+            logger.info(`Successfully verified ${contributors.length} contributors`);
+            return contributors;
+
+        } catch (error) {
+            logger.error('Failed to get verified contributors:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Verify a single contributor with Blockscout and ASI
+     */
+    async verifyContributor(campaignAddress, contributorAddress, contractAmount, verifyBlockscout = true, checkScam = true) {
+        try {
+            let blockscoutVerified = false;
+            let blockscoutDetails = null;
+            let scamRiskScore = 0.0;
+            let riskFactors = [];
+            let verificationStatus = 'PENDING';
+            let confidenceLevel = 'LOW';
+
+            // Get contribution details from contract
+            let contractContributions = {
+                totalAmount: contractAmount,
+                transactionCount: 1, // Will be filled from Blockscout
+                firstContribution: null,
+                lastContribution: null,
+                averageContribution: contractAmount
+            };
+
+            // Blockscout verification
+            if (verifyBlockscout) {
+                try {
+                    const blockscoutData = await this.verifyContributorWithBlockscout(campaignAddress, contributorAddress);
+
+                    if (blockscoutData.transactions.length > 0) {
+                        blockscoutVerified = true;
+                        blockscoutDetails = blockscoutData;
+
+                        // Update contribution details from Blockscout
+                        const contributions = blockscoutData.transactions.filter(tx =>
+                            tx.to.toLowerCase() === campaignAddress.toLowerCase()
+                        );
+
+                        if (contributions.length > 0) {
+                            contractContributions.transactionCount = contributions.length;
+                            contractContributions.firstContribution = new Date(contributions[0].timestamp).toISOString();
+                            contractContributions.lastContribution = new Date(contributions[contributions.length - 1].timestamp).toISOString();
+
+                            const totalBlockscoutAmount = contributions.reduce((sum, tx) => sum + parseInt(tx.value || '0'), 0);
+                            contractContributions.averageContribution = totalBlockscoutAmount / contributions.length;
+
+                            // Verify amounts match (within reasonable tolerance for gas)
+                            const contractTotal = parseInt(contractAmount);
+                            const tolerance = contractTotal * 0.1; // 10% tolerance for potential gas differences
+                            if (Math.abs(totalBlockscoutAmount - contractTotal) < tolerance) {
+                                verificationStatus = 'VERIFIED';
+                                confidenceLevel = 'HIGH';
+                            } else {
+                                verificationStatus = 'AMOUNT_MISMATCH';
+                                confidenceLevel = 'MEDIUM';
+                                riskFactors.push('Contract and Blockscout amounts do not match');
+                            }
+                        }
+                    } else {
+                        confidenceLevel = 'LOW';
+                        riskFactors.push('No transactions found in Blockscout');
+                    }
+                } catch (error) {
+                    logger.warn(`Blockscout verification failed for ${contributorAddress}:`, error.message);
+                    riskFactors.push('Blockscout verification unavailable');
+                }
+            }
+
+            // ASI scam detection
+            if (checkScam) {
+                try {
+                    const scamAnalysis = await this.analyzeContributorRisk(contributorAddress, campaignAddress);
+                    scamRiskScore = scamAnalysis.riskScore;
+                    riskFactors = [...riskFactors, ...scamAnalysis.riskFactors];
+
+                    if (scamRiskScore > 0.6) {
+                        verificationStatus = 'HIGH_RISK';
+                        confidenceLevel = 'HIGH';
+                    } else if (scamRiskScore > 0.3) {
+                        verificationStatus = 'MONITOR';
+                        confidenceLevel = 'MEDIUM';
+                    }
+                } catch (error) {
+                    logger.warn(`ASI scam detection failed for ${contributorAddress}:`, error.message);
+                }
+            }
+
+            return {
+                address: contributorAddress,
+                totalContributed: ethers.formatUnits(contractAmount, 18), // PYUSD has 18 decimals
+                contributionCount: contractContributions.transactionCount,
+                firstContribution: contractContributions.firstContribution,
+                lastContribution: contractContributions.lastContribution,
+                averageContribution: ethers.formatUnits(contractContributions.averageContribution, 18),
+                verificationStatus,
+                scamRiskScore,
+                blockscoutVerified,
+                riskFactors,
+                confidenceLevel,
+                asiVerifiedAt: new Date().toISOString(),
+                blockscoutDetails: verifyBlockscout ? blockscoutDetails : null
+            };
+
+        } catch (error) {
+            logger.error(`Failed to verify contributor ${contributorAddress}:`, error);
+
+            // Return basic data with error status
+            return {
+                address: contributorAddress,
+                totalContributed: ethers.formatUnits(contractAmount, 18),
+                contributionCount: 1,
+                firstContribution: null,
+                lastContribution: null,
+                averageContribution: ethers.formatUnits(contractAmount, 18),
+                verificationStatus: 'ERROR',
+                scamRiskScore: 0.5,
+                blockscoutVerified: false,
+                riskFactors: ['Verification failed'],
+                confidenceLevel: 'LOW',
+                asiVerifiedAt: new Date().toISOString(),
+                blockscoutDetails: null
+            };
+        }
+    }
+
+    /**
+     * Verify contributor with Blockscout API
+     */
+    async verifyContributorWithBlockscout(campaignAddress, contributorAddress) {
+        try {
+            const axios = require('axios');
+            const blockscoutUrl = process.env.BLOCKSCOUT_API_URL || 'https://eth-sepolia.blockscout.com/api';
+
+            // Get transactions for the contributor
+            const response = await axios.get(`${blockscoutUrl}`, {
+                params: {
+                    module: 'account',
+                    action: 'txlist',
+                    address: contributorAddress,
+                    startblock: 0,
+                    endblock: 'latest',
+                    page: 1,
+                    offset: 100,
+                    sort: 'asc'
+                },
+                timeout: 10000
+            });
+
+            const transactions = response.data?.result || [];
+
+            // Filter transactions to the campaign and parse values
+            const campaignTxs = transactions
+                .filter(tx => tx.to.toLowerCase() === campaignAddress.toLowerCase())
+                .map(tx => ({
+                    hash: tx.hash,
+                    timestamp: new Date(parseInt(tx.timeStamp) * 1000).toISOString(),
+                    value: tx.value,
+                    gasUsed: tx.gasUsed,
+                    from: tx.from,
+                    to: tx.to,
+                    blockNumber: parseInt(tx.blockNumber)
+                }));
+
+            return {
+                contributorAddress,
+                campaignAddress,
+                totalTransactions: transactions.length,
+                campaignTransactions: campaignTxs.length,
+                transactions: campaignTxs,
+                verified: campaignTxs.length > 0
+            };
+
+        } catch (error) {
+            logger.warn(`Blockscout API call failed for ${contributorAddress}:`, error.message);
+            throw new Error(`Blockscout verification failed: ${error.message}`);
+        }
+    }
+
+    /**
+     * Analyze contributor risk using ASI
+     */
+    async analyzeContributorRisk(contributorAddress, campaignAddress) {
+        try {
+            const aiVerificationService = require('./aiVerificationService');
+
+            // Get contributor stats from real-time data
+            const contributorStats = aiVerificationService.realtimeData.contributorStats.get(contributorAddress.toLowerCase());
+
+            // Get campaign creator analysis
+            const campaignCreator = await this.getCampaignCreator(campaignAddress);
+
+            let riskScore = 0.0;
+            const riskFactors = [];
+
+            // Contributor behavior analysis
+            if (contributorStats) {
+                if (contributorStats.totalTransactions < 3) {
+                    riskScore += 0.2;
+                    riskFactors.push('Low transaction volume');
+                }
+
+                if (contributorStats.transactionFrequency > 20) {
+                    riskScore += 0.3;
+                    riskFactors.push('High transaction frequency - potential automation');
+                }
+
+                if (contributorStats.riskScore > 0.6) {
+                    riskScore += 0.4;
+                    riskFactors.push('Historical suspicious behavior');
+                }
+            } else {
+                // Lack of historical data is suspicious for new contributors
+                riskScore += 0.1;
+                riskFactors.push('No historical contributor data');
+            }
+
+            // Check if contributor is also the campaign creator (self-contribution)
+            if (campaignCreator && contributorAddress.toLowerCase() === campaignCreator.toLowerCase()) {
+                riskScore += 0.5;
+                riskFactors.push('Self-contribution detected');
+            }
+
+            return {
+                riskScore: Math.min(1.0, riskScore),
+                riskFactors,
+                analysis: contributorStats ? 'Based on transaction history' : 'Limited data available'
+            };
+
+        } catch (error) {
+            logger.warn(`Contributor risk analysis failed for ${contributorAddress}:`, error);
+            return {
+                riskScore: 0.5,
+                riskFactors: ['Risk analysis unavailable'],
+                analysis: 'Error during analysis'
+            };
+        }
+    }
+
+    /**
+     * Get campaign creator from contract
+     */
+    async getCampaignCreator(campaignAddress) {
+        try {
+            const campaignABI = [
+                "function campaignInfo() view returns (string title, string description, uint256 totalGoal, uint256 totalRaised, uint256 startTime, uint256 endTime, address creator, bool isActive, uint256 milestoneCount)"
+            ];
+
+            const campaignContract = new ethers.Contract(campaignAddress, campaignABI, this.provider);
+            const campaignInfo = await campaignContract.campaignInfo();
+
+            return campaignInfo.creator;
+        } catch (error) {
+            logger.warn(`Failed to get campaign creator for ${campaignAddress}:`, error.message);
+            return null;
+        }
+    }
+
+    /**
+     * Get detailed contributor verification info
+     */
+    async getDetailedContributorVerification(campaignAddress, contributorAddress, enhanceWithRealtime = true) {
+        try {
+            logger.info(`Getting detailed verification for contributor ${contributorAddress} in campaign ${campaignAddress}`);
+
+            // Initialize campaign contract
+            const campaignABI = [
+                "function contributions(address) view returns (uint256)",
+                "function isBacker(address) view returns (bool)",
+                "function backers(uint256) view returns (address)",
+                "function backersCount() view returns (uint256)"
+            ];
+
+            const campaignContract = new ethers.Contract(campaignAddress, campaignABI, this.provider);
+
+            // Verify contributor exists in campaign
+            const isBacker = await campaignContract.isBacker(contributorAddress);
+            if (!isBacker) {
+                return null;
+            }
+
+            const contractAmount = await campaignContract.contributions(contributorAddress);
+
+            // Get detailed verification
+            const detailedVerification = await this.verifyContributor(
+                campaignAddress,
+                contributorAddress,
+                contractAmount,
+                true, // Always verify with Blockscout for detailed info
+                enhanceWithRealtime
+            );
+
+            // Add additional details if enhancing with real-time data
+            if (enhanceWithRealtime) {
+                try {
+                    const aiVerificationService = require('./aiVerificationService');
+                    const realtimeContext = aiVerificationService.getRealtimeVerificationContext(campaignAddress, contributorAddress);
+
+                    detailedVerification.realtimeContext = {
+                        pyusdPrice: realtimeContext.pyusdPrice,
+                        contributorStats: realtimeContext.contributorStats?.toJSON?.() || realtimeContext.contributorStats,
+                        marketData: realtimeContext.marketData,
+                        freshness: realtimeContext.timestamp
+                    };
+                } catch (error) {
+                    logger.warn('Failed to add realtime context:', error.message);
+                }
+            }
+
+            return detailedVerification;
+
+        } catch (error) {
+            logger.error(`Failed to get detailed contributor verification:`, error);
+            throw error;
+        }
+    }
 }
 
 module.exports = new BlockchainService();

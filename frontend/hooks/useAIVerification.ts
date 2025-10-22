@@ -49,6 +49,46 @@ export interface VerificationStatus {
     aiReportHash?: string;
 }
 
+export interface VerifiedContributor {
+    address: string;
+    totalContributed: string;
+    contributionCount: number;
+    firstContribution?: string;
+    lastContribution?: string;
+    averageContribution: string;
+    verificationStatus: string;
+    scamRiskScore: number;
+    blockscoutVerified: boolean;
+    riskFactors: string[];
+    confidenceLevel: string;
+    asiVerifiedAt: string;
+    blockscoutDetails?: any;
+}
+
+export interface ContributorVerificationData {
+    campaignAddress: string;
+    contributor: VerifiedContributor;
+    verification: {
+        blockscoutStatus: string;
+        scamDetectionStatus: string;
+        confidenceLevel: string;
+        lastVerified: string;
+    };
+    timestamp: string;
+}
+
+export interface ContributorsData {
+    campaignAddress: string;
+    totalContributors: number;
+    contributors: VerifiedContributor[];
+    metadata: {
+        requestedRange: { startIndex: number; limit: number };
+        blockscoutVerification: boolean;
+        scamDetection: boolean;
+        timestamp: string;
+    };
+}
+
 /**
  * Custom hook for ASI AI verification integration
  */
