@@ -5,9 +5,9 @@ import { CAMPAIGN_FACTORY_ABI, CONTRACT_ADDRESSES, CampaignData } from '../../..
 // Server-side API route to fetch campaigns (bypasses CORS)
 export async function GET() {
     try {
-        // Initialize provider with RPC URL
+        // Initialize provider with RPC URL from environment or fallback
         const provider = new ethers.JsonRpcProvider(
-            process.env.NEXT_PUBLIC_RPC_URL || 'https://eth-sepolia.g.alchemy.com/v2/ltQPtfSZ7mLXfOOk_drsl'
+            process.env.NEXT_PUBLIC_RPC_URL || 'https://sepolia.drpc.org'
         );
 
         // Get contract instance

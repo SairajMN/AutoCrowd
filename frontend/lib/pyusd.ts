@@ -20,7 +20,7 @@ export const PYUSD_CONFIGS: Record<number, PYUSDConfig> = {
         chainId: 1
     },
     11155111: { // Sepolia Testnet
-        tokenAddress: '0x8a4712c2d7c4f9b8a1e6a2c7b0f6e9a3', // PYUSD on Sepolia
+        tokenAddress: '0xCaC524BcA292aaade2DF8A05cC58F0a65B1B3bB9', // PYUSD on Sepolia (matches contracts.ts)
         faucetUrl: 'https://faucet.paypal.com/testnet',
         explorerUrl: 'https://eth-sepolia.blockscout.com/token/',
         chainId: 11155111
@@ -296,7 +296,7 @@ function getNetworkName(chainId?: number): string {
  */
 export const PYUSD_ADDRESSES = {
     MAINNET: '0x6c3ea9036406852006290770BEdFcAbA0e23A0e8',
-    SEPOLIA: '0x8a4712c2d7c4f9b8a1e6a2c7b0f6e9a3',
+    SEPOLIA: '0xCaC524BcA292aaade2DF8A05cC58F0a65B1B3bB9', // Fixed to match config
     OPTIMISM_SEPOLIA: '0x25a3aB79eE2D40C53b3Bc3640e9c5C9E5B9Fd2e0'
 } as const;
 

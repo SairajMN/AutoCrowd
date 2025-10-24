@@ -23,6 +23,7 @@ class AIVerificationService {
     // Real-time data integrations
     this.pyusdApiUrl = process.env.PYUSD_API_URL || 'https://api.coinbase.com/v2/exchange-rates?currency=USD';
     this.blockscoutApiUrl = process.env.BLOCKSCOUT_API_URL || 'https://eth-sepolia.blockscout.com/api';
+    this.pyusdContractAddress = process.env.PYUSD_CONTRACT_ADDRESS || '0xCaC524BcA292aaade2DF8A05cC58F0a65B1B3bB9';
     this.cmcApiKey = process.env.COINMARKETCAP_API_KEY;
     this.cmcApiUrl = process.env.COINMARKETCAP_API_URL || 'https://pro-api.coinmarketcap.com/v1';
 
@@ -492,7 +493,7 @@ class AIVerificationService {
       weekdayActivity: 1 - weekendRatio,
       activityBursts: activityBursts.count,
       burstIntensity: activityBursts.intensity,
-      temporalRegularity: this.calculateTemporalRegularity(contributions),
+      temporalRegularity: this.analyzeTemporalDistribution(contributions).regularity,
       unusualTiming: weekendRatio > 0.3 || hourDistribution[peakHour] > contributions.length * 0.5
     };
   }
@@ -840,7 +841,6 @@ class AIVerificationService {
 
     logger.info('Real-time data services stopped');
   }
-}
 
   /**
    * Update live PYUSD pricing data
@@ -990,9 +990,8 @@ calculateVolatility() {
     }
 
     // Get recent transactions for PYUSD token
-    const pyusdAddress = '0x8a4712c2d7c4f9b8a1e6a2c7b0f6e9a3'; // PYUSD on Sepolia
     const txResponse = await axios.get(
-      `${this.blockscoutApiUrl}?module=account&action=txlist&address=${pyusdAddress}&page=1&offset=20`,
+      `${this.blockscoutApiUrl}?module=account&action=txlist&address=${this.pyusdContractAddress}&page=1&offset=20`,
       { timeout: 5000 }
     );
 
@@ -1014,7 +1013,7 @@ calculateVolatility() {
         contributors.add(tx.to);
       });
       data.activeContributors = Array.from(contributors).filter(addr =>
-        addr && addr !== pyusdAddress && addr !== '0x0000000000000000000000000000000000000000'
+        addr && addr !== this.pyusdContractAddress && addr !== '0x0000000000000000000000000000000000000000'
       );
     }
 

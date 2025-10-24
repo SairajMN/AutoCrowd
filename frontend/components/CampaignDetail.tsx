@@ -331,16 +331,29 @@ export function CampaignDetail({ campaignAddress }: CampaignDetailProps) {
                                     <button
                                         onClick={async () => {
                                             try {
-                                                const result = await requestVerification({
-                                                    milestoneId: 'risk_assessment',
-                                                    campaignAddress: campaignAddress,
-                                                    description: campaign.description,
-                                                    evidenceHash: 'risk_check'
+                                                // Call scam detection API directly
+                                                const response = await fetch('/api/verification/scam-detection', {
+                                                    method: 'POST',
+                                                    headers: {
+                                                        'Content-Type': 'application/json',
+                                                    },
+                                                    body: JSON.stringify({
+                                                        campaignAddress: campaignAddress,
+                                                        submitterAddress: campaign.creator
+                                                    }),
                                                 });
-                                                if (result && result.scamDetection) {
+
+                                                if (!response.ok) {
+                                                    throw new Error(`HTTP ${response.status}`);
+                                                }
+
+                                                const result = await response.json();
+                                                if (result.success && result.scamDetection) {
                                                     const risk = result.scamDetection.overallScamRisk;
-                                                    const level = risk > 0.7 ? 'HIGH' : risk > 0.4 ? 'MEDIUM' : 'LOW';
-                                                    alert(`Campaign Risk Assessment: ${level} (${Math.round(risk * 100)}%)\n\n${result.scamDetection.warning || 'No major issues detected'}`);
+                                                    const level = result.scamDetection.riskLevel;
+                                                    alert(`Campaign Risk Assessment: ${level} (${Math.round(risk * 100)}%)\n\n${result.scamDetection.warning || 'Analysis completed'}`);
+                                                } else {
+                                                    throw new Error(result.error || 'Scam detection failed');
                                                 }
                                             } catch (error) {
                                                 alert('Risk assessment failed: ' + (error as Error).message);
