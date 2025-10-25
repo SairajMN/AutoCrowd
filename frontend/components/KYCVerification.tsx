@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useVeriffSDK } from '../hooks/useVeriffSDK';
+import { useBallerineSDK } from '../hooks/useBallerineSDK';
 
 interface KYCVerificationProps {
     walletAddress: string;
@@ -23,11 +23,11 @@ export default function KYCVerification({ walletAddress, onVerificationComplete,
         startVerification,
         checkStatus,
         cleanup
-    } = useVeriffSDK();
+    } = useBallerineSDK();
 
-    // Initialize Veriff SDK when component mounts
+    // Initialize Ballerine SDK when component mounts
     useEffect(() => {
-        const initializeVeriff = async () => {
+        const initializeBallerine = async () => {
             try {
                 setIsLoading(true);
                 setError(null);
@@ -47,14 +47,15 @@ export default function KYCVerification({ walletAddress, onVerificationComplete,
 
                 // Initialize SDK with configuration
                 await initializeSDK({
-                    host: sdkConfig.host,
+                    endpoint: sdkConfig.endpoint,
                     apiKey: sdkConfig.apiKey,
-                    parentId: 'veriff-root',
+                    flowName: sdkConfig.flowName,
+                    elements: sdkConfig.elements,
                     onSession: (err: any, response: any) => {
-                        console.log('Veriff session callback:', { err, response });
+                        console.log('Ballerine session callback:', { err, response });
                     },
                     onFinished: (err: any, response: any) => {
-                        console.log('Veriff verification finished:', { err, response });
+                        console.log('Ballerine verification finished:', { err, response });
 
                         if (err) {
                             setError(`Verification failed: ${err.message || 'Unknown error'}`);
@@ -65,11 +66,11 @@ export default function KYCVerification({ walletAddress, onVerificationComplete,
                         if (response && response.status) {
                             let status: 'verified' | 'rejected' | 'pending';
                             switch (response.status.toLowerCase()) {
-                                case 'success':
+                                case 'completed':
                                 case 'approved':
                                     status = 'verified';
                                     break;
-                                case 'declined':
+                                case 'failed':
                                 case 'rejected':
                                     status = 'rejected';
                                     break;
@@ -82,17 +83,17 @@ export default function KYCVerification({ walletAddress, onVerificationComplete,
                         }
                     },
                     onEvent: (eventName: string, data?: any) => {
-                        console.log('Veriff event:', eventName, data);
+                        console.log('Ballerine event:', eventName, data);
 
                         switch (eventName) {
-                            case 'started':
+                            case 'flow_started':
                                 setCurrentStep('verifying');
                                 break;
-                            case 'finished':
+                            case 'flow_completed':
                                 setCurrentStep('completed');
                                 break;
-                            case 'aborted':
-                                setError('Verification was cancelled');
+                            case 'flow_failed':
+                                setError('Verification was cancelled or failed');
                                 onVerificationComplete('rejected');
                                 break;
                         }
@@ -103,13 +104,13 @@ export default function KYCVerification({ walletAddress, onVerificationComplete,
                 setIsLoading(false);
 
             } catch (error) {
-                console.error('Failed to initialize Veriff SDK:', error);
+                console.error('Failed to initialize Ballerine SDK:', error);
                 setError(error instanceof Error ? error.message : 'Failed to initialize verification');
                 setIsLoading(false);
             }
         };
 
-        initializeVeriff();
+        initializeBallerine();
 
         // Cleanup on unmount
         return () => {
@@ -181,13 +182,13 @@ export default function KYCVerification({ walletAddress, onVerificationComplete,
                     ) : isLoading ? (
                         <div className="mb-6">
                             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-                            <p className="text-gray-600">Initializing Veriff verification...</p>
+                            <p className="text-gray-600">Initializing Ballerine verification...</p>
                         </div>
                     ) : currentStep === 'ready' ? (
                         <div className="mb-6">
                             <div className="bg-blue-50 border border-blue-200 rounded-md p-4 mb-4">
                                 <p className="text-blue-800 text-sm">
-                                    You need to complete identity verification using Veriff before creating a campaign.
+                                    You need to complete identity verification using Ballerine before creating a campaign.
                                 </p>
                             </div>
                             <button
@@ -200,7 +201,7 @@ export default function KYCVerification({ walletAddress, onVerificationComplete,
                     ) : currentStep === 'verifying' ? (
                         <div className="mb-6">
                             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-                            <p className="text-gray-600">Redirecting to Veriff verification...</p>
+                            <p className="text-gray-600">Redirecting to Ballerine verification...</p>
                             <p className="text-sm text-gray-500 mt-2">
                                 Please complete the verification in the new window.
                             </p>
@@ -226,7 +227,7 @@ export default function KYCVerification({ walletAddress, onVerificationComplete,
                 <div className="text-center text-xs text-gray-500 mt-6">
                     <p>
                         This verification is required to comply with regulations and prevent fraud.
-                        Your data is securely handled by Veriff and will not be shared.
+                        Your data is securely handled by Ballerine and will not be shared.
                     </p>
                 </div>
             </div>

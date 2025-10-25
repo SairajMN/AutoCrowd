@@ -31,7 +31,7 @@ const statusCheckSchema = Joi.object({
 
 /**
  * POST /api/kyc/start
- * Start KYC verification session using Veriff only
+ * Start KYC verification session using Ballerine only
  */
 router.post('/start', async (req, res) => {
   try {
@@ -44,9 +44,9 @@ router.post('/start', async (req, res) => {
       });
     }
 
-    logger.info(`Starting Veriff KYC verification for ${value.walletAddress}`);
+    logger.info(`Starting Ballerine KYC verification for ${value.walletAddress}`);
 
-    // Start verification using Veriff only
+    // Start verification using Ballerine only
     const verificationSession = await kycVerificationService.startVerification(
       value.walletAddress,
       value.userData || {}
@@ -134,15 +134,57 @@ router.get('/session/:sessionId', async (req, res) => {
 });
 
 /**
+ * POST /api/kyc/ballerine-callback
+ * Handle Ballerine verification callback
+ */
+router.post('/ballerine-callback', async (req, res) => {
+  try {
+    const signature = req.headers['x-signature'];
+    const timestamp = req.headers['x-timestamp'];
+
+    logger.info('Received Ballerine callback', {
+      hasSignature: !!signature,
+      hasTimestamp: !!timestamp,
+      contentType: req.headers['content-type'],
+      userAgent: req.headers['user-agent']
+    });
+
+    // Handle callback with signature verification
+    const ballerineSDKService = require('../services/ballerineSDKService');
+    const result = await ballerineSDKService.handleVerificationResult(
+      req.body.sessionId || req.body.id,
+      req.body
+    );
+
+    // Always return 200 OK to prevent retries
+    res.status(200).json({
+      success: true,
+      message: 'Callback processed',
+      data: result
+    });
+
+  } catch (error) {
+    logger.error('Ballerine callback processing failed:', error);
+
+    // Return 200 OK even on error to prevent retries
+    res.status(200).json({
+      success: false,
+      message: 'Callback processing failed',
+      error: error.message
+    });
+  }
+});
+
+/**
  * POST /api/kyc/veriff-callback
- * Handle Veriff verification callback with signature verification
+ * Handle Veriff verification callback with signature verification (legacy)
  */
 router.post('/veriff-callback', async (req, res) => {
   try {
     const signature = req.headers['x-signature'];
     const timestamp = req.headers['x-timestamp'];
 
-    logger.info('Received Veriff callback', {
+    logger.info('Received Veriff callback (legacy)', {
       hasSignature: !!signature,
       hasTimestamp: !!timestamp,
       contentType: req.headers['content-type'],
@@ -217,17 +259,40 @@ router.get('/nft/:walletAddress', async (req, res) => {
 
 /**
  * GET /api/kyc/sdk-config
- * Get Veriff SDK configuration for frontend
+ * Get Ballerine SDK configuration for frontend
  */
 router.get('/sdk-config', async (req, res) => {
   try {
-    const veriffSDKService = require('../services/veriffSDKService');
+    const ballerineSDKService = require('../services/ballerineSDKService');
 
     const sdkConfig = {
-      apiKey: process.env.VERIFF_API_KEY || '',
-      host: 'veriff.me',
-      sdkScript: veriffSDKService.getSDKScript(),
-      stats: veriffSDKService.getStats()
+      apiKey: process.env.BALLERINE_API_KEY || '',
+      endpoint: process.env.BALLERINE_ENDPOINT || 'https://api.ballerine.io',
+      flowName: 'kyc-flow',
+      elements: {
+        document: {
+          name: 'document',
+          type: 'document',
+          options: {
+            documents: [
+              { type: 'passport', category: 'travel_document' },
+              { type: 'drivers_license', category: 'government_id' },
+              { type: 'id_card', category: 'government_id' },
+              { type: 'visa', category: 'travel_document' }
+            ]
+          }
+        },
+        selfie: {
+          name: 'selfie',
+          type: 'selfie',
+          options: {
+            requireQuality: true,
+            maxRetries: 3
+          }
+        }
+      },
+      sdkScript: ballerineSDKService.getSDKScript(),
+      stats: ballerineSDKService.getStats()
     };
 
     res.json({

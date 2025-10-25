@@ -1,12 +1,12 @@
-# Enhanced KYC Verification System with Veriff SDK and NFT Integration
+# Enhanced KYC Verification System with Ballerine SDK and NFT Integration
 
 ## Overview
 
-This enhanced KYC (Know Your Customer) verification system provides a comprehensive identity verification solution using Veriff's advanced SDK, integrated with blockchain-based NFT minting for verified users. The system ensures secure, compliant, and user-friendly identity verification for campaign creators.
+This enhanced KYC (Know Your Customer) verification system provides a comprehensive identity verification solution using Ballerine's advanced SDK, integrated with blockchain-based NFT minting for verified users. The system ensures secure, compliant, and user-friendly identity verification for campaign creators.
 
 ## 🚀 Key Features
 
-### ✅ Veriff SDK Integration
+### ✅ Ballerine SDK Integration
 - **Advanced Identity Verification**: Face verification with liveness detection
 - **Document Verification**: Government-issued ID verification
 - **Real-time Processing**: Instant verification results
@@ -28,8 +28,8 @@ This enhanced KYC (Know Your Customer) verification system provides a comprehens
 
 ### Backend Components
 
-#### 1. Veriff SDK Service (`backend/src/services/veriffSDKService.js`)
-- **Purpose**: Manages Veriff SDK integration and session handling
+#### 1. Ballerine SDK Service (`backend/src/services/ballerineSDKService.js`)
+- **Purpose**: Manages Ballerine SDK integration and session handling
 - **Key Functions**:
   - `createVerificationSession()`: Creates new verification sessions
   - `handleVerificationResult()`: Processes verification outcomes
@@ -54,15 +54,15 @@ This enhanced KYC (Know Your Customer) verification system provides a comprehens
 
 ### Frontend Components
 
-#### 1. Veriff SDK Hook (`frontend/hooks/useVeriffSDK.ts`)
-- **Purpose**: React hook for Veriff SDK integration
+#### 1. Ballerine SDK Hook (`frontend/hooks/useBallerineSDK.ts`)
+- **Purpose**: React hook for Ballerine SDK integration
 - **Key Features**:
   - SDK loading and initialization
   - Session management
   - Event handling
   - Error management
 
-#### 2. Enhanced KYC Component (`frontend/components/EnhancedKYCVerification.tsx`)
+#### 2. Enhanced KYC Component (`frontend/components/KYCVerification.tsx`)
 - **Purpose**: Main verification interface
 - **Key Features**:
   - Progressive verification steps
@@ -86,10 +86,9 @@ This enhanced KYC (Know Your Customer) verification system provides a comprehens
 
 #### Backend (.env)
 ```bash
-# Veriff Configuration
-VERIFF_API_KEY=your_veriff_api_key
-VERIFF_API_SECRET=your_veriff_api_secret
-VERIFF_ENDPOINT=https://api.sandbox.veriff.com
+# Ballerine Configuration
+BALLERINE_API_KEY=your_ballerine_api_key
+BALLERINE_ENDPOINT=https://api.ballerine.io
 
 # Blockchain Configuration
 ETH_RPC_URL=your_ethereum_rpc_url
@@ -107,8 +106,8 @@ NODE_ENV=development
 
 #### Frontend (.env.local)
 ```bash
-# Veriff Configuration
-NEXT_PUBLIC_VERIFF_API_KEY=your_veriff_api_key
+# Ballerine Configuration
+NEXT_PUBLIC_BALLERINE_API_KEY=your_ballerine_api_key
 
 # Backend Configuration
 NEXT_PUBLIC_BACKEND_URL=http://localhost:8000
@@ -129,7 +128,7 @@ NEXT_PUBLIC_BACKEND_URL=http://localhost:8000
 
 2. **Configure Environment**
    - Copy `.env.example` to `.env` in both backend and frontend
-   - Update with your Veriff API credentials
+   - Update with your Ballerine API credentials
    - Configure blockchain settings
 
 3. **Deploy Smart Contracts**
@@ -160,11 +159,33 @@ const session = await startVerification(walletAddress, userData);
 
 ### 2. SDK Initialization
 ```javascript
-// Initialize Veriff SDK
+// Initialize Ballerine SDK
 await initializeSDK({
-  host: 'veriff.me',
-  apiKey: process.env.NEXT_PUBLIC_VERIFF_API_KEY,
-  parentId: 'veriff-container'
+  endpoint: 'https://api.ballerine.io',
+  apiKey: process.env.NEXT_PUBLIC_BALLERINE_API_KEY,
+  flowName: 'kyc-flow',
+  elements: {
+    document: {
+      name: 'document',
+      type: 'document',
+      options: {
+        documents: [
+          { type: 'passport', category: 'travel_document' },
+          { type: 'drivers_license', category: 'government_id' },
+          { type: 'id_card', category: 'government_id' },
+          { type: 'visa', category: 'travel_document' }
+        ]
+      }
+    },
+    selfie: {
+      name: 'selfie',
+      type: 'selfie',
+      options: {
+        requireQuality: true,
+        maxRetries: 3
+      }
+    }
+  }
 });
 ```
 
@@ -192,7 +213,7 @@ await setKYCStatus(walletAddress, true);
 - `POST /api/kyc/start` - Start verification session
 - `GET /api/kyc/status/:walletAddress` - Get verification status
 - `GET /api/kyc/session/:sessionId` - Get session details
-- `POST /api/kyc/veriff-callback` - Handle Veriff webhooks
+- `POST /api/kyc/ballerine-callback` - Handle Ballerine webhooks
 
 ### NFT Management
 - `GET /api/kyc/nft/:walletAddress` - Get NFT details
@@ -254,7 +275,7 @@ TEST_WALLET=0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6 node test_enhanced_kyc_fl
 ## 🚀 Deployment
 
 ### Production Checklist
-- [ ] Veriff production API keys configured
+- [ ] Ballerine production API keys configured
 - [ ] Smart contracts deployed to mainnet
 - [ ] Environment variables secured
 - [ ] SSL certificates installed
@@ -275,8 +296,8 @@ TEST_WALLET=0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6 node test_enhanced_kyc_fl
 #### SDK Loading Issues
 ```javascript
 // Check SDK loading status
-if (!window.Veriff) {
-  console.error('Veriff SDK not loaded');
+if (!window.BallerineSDK) {
+  console.error('Ballerine SDK not loaded');
   // Retry loading or show error
 }
 ```
@@ -310,13 +331,13 @@ LOG_LEVEL=debug npm start
 ## 📚 Additional Resources
 
 ### Documentation
-- [Veriff SDK Documentation](https://devdocs.veriff.com/docs/sdk-guide)
+- [Ballerine SDK Documentation](https://docs.ballerine.io)
 - [OpenZeppelin Contracts](https://docs.openzeppelin.com/contracts/)
 - [Ethers.js Documentation](https://docs.ethers.io/)
 
 ### Support
 - **Technical Issues**: Check logs and error messages
-- **Veriff Integration**: Consult Veriff documentation
+- **Ballerine Integration**: Consult Ballerine documentation
 - **Blockchain Issues**: Verify network connectivity and gas settings
 
 ## 🎯 Future Enhancements

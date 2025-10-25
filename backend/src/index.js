@@ -100,9 +100,14 @@ async function initializeServices() {
     await databaseService.initialize();
     logger.info('Database service initialized');
 
-    // Initialize blockchain service
-    await blockchainService.initialize();
-    logger.info('Blockchain service initialized');
+    // Initialize blockchain service (optional for webhook testing)
+    try {
+      await blockchainService.initialize();
+      logger.info('Blockchain service initialized');
+    } catch (error) {
+      logger.warn('Blockchain service initialization failed, continuing without blockchain features:', error.message);
+      logger.warn('Webhook functionality will still work, but blockchain operations will be disabled');
+    }
 
     // Initialize AI verification service
     await aiVerificationService.initialize();

@@ -127,11 +127,27 @@ class BlockchainService {
         try {
             const network = await this.provider.getNetwork();
             if (parseInt(network.chainId.toString()) !== this.chainId) {
-                throw new Error(`Wrong network. Expected chain ID ${this.chainId}, got ${network.chainId}`);
+                const errorMsg = `Wrong network. Expected chain ID ${this.chainId}, got ${network.chainId}`;
+                logger.warn(errorMsg);
+
+                // In development mode, don't throw error, just warn
+                if (process.env.NODE_ENV === 'development' || process.env.SKIP_NETWORK_VERIFICATION === 'true') {
+                    logger.warn('Skipping network verification in development mode');
+                    return;
+                }
+
+                throw new Error(errorMsg);
             }
             logger.info(`Connected to network: ${network.name} (Chain ID: ${network.chainId})`);
         } catch (error) {
             logger.error('Network verification failed:', error);
+
+            // In development mode, don't throw error, just warn
+            if (process.env.NODE_ENV === 'development' || process.env.SKIP_NETWORK_VERIFICATION === 'true') {
+                logger.warn('Skipping network verification in development mode');
+                return;
+            }
+
             throw error;
         }
     }

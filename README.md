@@ -18,7 +18,7 @@ This project proudly integrates cutting-edge technologies from our sponsors:
 ## 🚀 Features
 
 - **🤖 ASI AI Verification**: Real-time milestone verification using autonomous agents
-- **🔐 Veriff KYC Integration**: Production-ready identity verification with NFT minting
+- **🔐 Ballerine KYC Integration**: Production-ready identity verification with NFT minting
 - **🔍 Blockscout Integration**: Complete blockchain exploration and monitoring
 - **💰 PYUSD Stablecoin**: PayPal-backed stablecoin for contributions
 - **🔒 Enhanced Security**: Multi-layered fraud detection and risk assessment
@@ -193,7 +193,7 @@ For comprehensive environment variable configuration, see **[ENVIRONMENT_VARIABL
 - **Blockchain Configuration**: RPC URLs, private keys, contract addresses
 - **AI Integration**: ASI API credentials, AgentVerse tokens
 - **Database Setup**: Supabase PostgreSQL configuration
-- **Veriff KYC**: Production API keys and webhook settings
+- **Ballerine KYC**: Production API keys and webhook settings
 - **Security**: JWT secrets, encryption keys, monitoring
 - **Frontend Settings**: API URLs, feature flags, analytics
 

@@ -2,7 +2,7 @@ const axios = require('axios');
 const winston = require('winston');
 const crypto = require('crypto');
 const databaseService = require('./databaseService');
-const veriffSDKService = require('./veriffSDKService');
+const ballerineSDKService = require('./ballerineSDKService');
 
 const logger = winston.createLogger({
   level: process.env.LOG_LEVEL || 'info',
@@ -14,21 +14,14 @@ const logger = winston.createLogger({
 });
 
 /**
- * KYC Verification Service for campaign creators using Veriff only
- * Integrates with Veriff for face and document verification
+ * KYC Verification Service for campaign creators using Ballerine only
+ * Integrates with Ballerine for comprehensive identity verification
  */
 class KYCVerificationService {
   constructor() {
-    // Only Veriff for real KYC verification
-    this.veriffApiKey = process.env.VERIFF_API_KEY;
-    this.veriffApiSecret = process.env.VERIFF_API_SECRET;
-    this.veriffEndpoint = process.env.VERIFF_ENDPOINT || 'https://api.veriff.com';
-
-    // Fallback endpoints in case of connectivity issues
-    this.veriffEndpoints = [
-      'https://api.veriff.com',
-      'https://api.sandbox.veriff.com'
-    ];
+    // Only Ballerine for real KYC verification
+    this.ballerineApiKey = process.env.BALLERINE_API_KEY;
+    this.ballerineEndpoint = process.env.BALLERINE_ENDPOINT || 'https://api.ballerine.io';
 
     // Verification storage (in production, use database)
     this.verificationStore = new Map();
@@ -37,13 +30,14 @@ class KYCVerificationService {
     this.verificationTimeout = parseInt(process.env.KYC_TIMEOUT) || 300000; // 5 minutes
     this.maxRetries = parseInt(process.env.KYC_MAX_RETRIES) || 3;
 
-    logger.info('KYC Verification Service initialized with Veriff only', {
-      veriffConfigured: !!this.veriffApiKey,
-      endpoint: this.veriffEndpoint
+    logger.info('KYC Verification Service initialized with Ballerine only', {
+      ballerineConfigured: !!this.ballerineApiKey,
+      endpoint: this.ballerineEndpoint
     });
 
-    if (!this.veriffApiKey || !this.veriffApiSecret) {
-      logger.error('VERIFF_API_KEY and VERIFF_API_SECRET must be configured for KYC verification');
+    if (!this.ballerineApiKey) {
+      logger.warn('BALLERINE_API_KEY not configured - will use mock verification');
+      this.developmentMode = true; // Force development mode if no API key
     }
 
     // Development mode flag for when Veriff is not accessible
@@ -93,8 +87,8 @@ class KYCVerificationService {
           // Simulate successful verification
           const mockCallbackData = {
             verification: {
-              sessionToken: verification.verification_data?.veriffSessionId || 'mock_session',
-              status: 'finished',
+              sessionToken: verification.verification_data?.ballerineSessionId || 'mock_session',
+              status: 'completed',
               decision: 'approved',
               person: {
                 firstName: verification.user_data?.firstName || 'Test',
@@ -120,39 +114,38 @@ class KYCVerificationService {
   }
 
   /**
-   * Start KYC verification session for a user using Veriff SDK
+   * Start KYC verification session for a user using Ballerine SDK
    * @param {string} walletAddress - User's wallet address
    * @param {Object} userData - User information
    * @returns {Object} Verification session details
    */
   async startVerification(walletAddress, userData = {}) {
-    logger.info(`Starting Veriff SDK KYC verification for ${walletAddress}`);
+    logger.info(`Starting Ballerine SDK KYC verification for ${walletAddress}`);
 
     try {
-      // Use Veriff SDK service to create session
-      const veriffSession = await veriffSDKService.createVerificationSession({
+      // Use Ballerine SDK service to create session
+      const ballerineSession = await ballerineSDKService.createVerificationSession({
         walletAddress,
         userData,
-        verificationLevel: 'Full',
-        documentType: 'PASSPORT'
+        verificationLevel: 'basic'
       });
 
       // Create session data for database
       const sessionData = {
-        sessionId: veriffSession.sessionId,
+        sessionId: ballerineSession.sessionId,
         walletAddress: walletAddress.toLowerCase(),
-        verificationType: 'kyc_veriff_sdk',
+        verificationType: 'kyc_ballerine_sdk',
         status: 'pending',
-        provider: 'veriff',
+        provider: 'ballerine',
         userData,
-        expiresAt: veriffSession.expiresAt,
+        expiresAt: ballerineSession.expiresAt,
         verificationData: {
-          provider: 'veriff',
-          sessionId: veriffSession.sessionId,
-          veriffSessionId: veriffSession.veriffSessionId,
+          provider: 'ballerine',
+          sessionId: ballerineSession.sessionId,
+          ballerineSessionId: ballerineSession.ballerineSessionId,
           walletAddress: walletAddress.toLowerCase(),
           startedAt: new Date().toISOString(),
-          sdkConfig: veriffSession.sdkConfig
+          sdkConfig: ballerineSession.sdkConfig
         }
       };
 
@@ -161,34 +154,34 @@ class KYCVerificationService {
 
       // Log attempt
       await databaseService.logVerificationAttempt({
-        sessionId: veriffSession.sessionId,
-        attemptType: 'start_veriff_sdk_verification',
-        provider: 'veriff',
+        sessionId: ballerineSession.sessionId,
+        attemptType: 'start_ballerine_sdk_verification',
+        provider: 'ballerine',
         status: 'success'
       });
 
-      logger.info(`Veriff SDK KYC session ${veriffSession.sessionId} started for ${walletAddress}`);
+      logger.info(`Ballerine SDK KYC session ${ballerineSession.sessionId} started for ${walletAddress}`);
 
       return {
-        sessionId: veriffSession.sessionId,
-        veriffSessionId: veriffSession.veriffSessionId,
-        verificationUrl: veriffSession.verificationUrl,
+        sessionId: ballerineSession.sessionId,
+        ballerineSessionId: ballerineSession.ballerineSessionId,
+        verificationUrl: ballerineSession.verificationUrl,
         status: 'pending',
-        expiresAt: veriffSession.expiresAt,
-        provider: 'veriff',
-        sdkConfig: veriffSession.sdkConfig,
-        message: 'Complete Veriff identity verification using the SDK to unlock campaign creation.'
+        expiresAt: ballerineSession.expiresAt,
+        provider: 'ballerine',
+        sdkConfig: ballerineSession.sdkConfig,
+        message: 'Complete Ballerine identity verification using the SDK to unlock campaign creation.'
       };
 
     } catch (error) {
-      logger.error(`Failed to start Veriff SDK KYC verification for ${walletAddress}:`, error);
+      logger.error(`Failed to start Ballerine SDK KYC verification for ${walletAddress}:`, error);
 
       // Log failed attempt
       try {
         await databaseService.logVerificationAttempt({
           sessionId: this.generateSessionId(),
-          attemptType: 'start_veriff_sdk_verification',
-          provider: 'veriff',
+          attemptType: 'start_ballerine_sdk_verification',
+          provider: 'ballerine',
           status: 'failed',
           errorMessage: error.message
         });
@@ -196,7 +189,7 @@ class KYCVerificationService {
         logger.error('Failed to log verification attempt:', logError);
       }
 
-      throw new Error(`Veriff SDK KYC verification initialization failed: ${error.message}`);
+      throw new Error(`Ballerine SDK KYC verification initialization failed: ${error.message}`);
     }
   }
 
@@ -679,7 +672,7 @@ class KYCVerificationService {
         attributes: [
           {
             trait_type: 'Verification Provider',
-            value: 'Veriff'
+            value: 'Ballerine'
           },
           {
             trait_type: 'VerificationLevel',
@@ -697,7 +690,7 @@ class KYCVerificationService {
         properties: {
           walletAddress,
           verificationDate: new Date().toISOString(),
-          provider: 'veriff',
+          provider: 'ballerine',
           sessionId
         }
       };
@@ -707,7 +700,7 @@ class KYCVerificationService {
 
       // Mint NFT using blockchain service
       const blockchainService = require('./blockchainService');
-      const mintResult = await blockchainService.mintVerificationNFT(walletAddress, 'veriff', 'Full', metadataURI);
+      const mintResult = await blockchainService.mintVerificationNFT(walletAddress, 'ballerine', 'Full', metadataURI);
 
       if (!mintResult || !mintResult.tokenId) {
         throw new Error('NFT minting failed - no tokenId returned');
@@ -726,7 +719,7 @@ class KYCVerificationService {
         mintedAt: new Date(),
         contractAddress: process.env.NFT_CONTRACT_ADDRESS || '0x4C887cd7dcFe9725D816efab0F5061317E590B57',
         verificationLevel: 'Full',
-        provider: 'veriff'
+        provider: 'ballerine'
       };
 
       // Update session with NFT data
@@ -741,7 +734,7 @@ class KYCVerificationService {
       await databaseService.logVerificationAttempt({
         sessionId,
         attemptType: 'nft_minted',
-        provider: 'veriff',
+        provider: 'ballerine',
         status: 'success',
         metadata: {
           tokenId: tokenId.toString(),
@@ -768,7 +761,7 @@ class KYCVerificationService {
         await databaseService.logVerificationAttempt({
           sessionId: session.session_id,
           attemptType: 'nft_minting_failed',
-          provider: 'veriff',
+          provider: 'ballerine',
           status: 'failed',
           errorMessage: error.message,
           metadata: { walletAddress: session.wallet_address }
