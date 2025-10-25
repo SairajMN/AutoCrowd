@@ -22,12 +22,12 @@ export default function HomePage() {
                             <span className="ml-2 text-sm text-gray-500">AI-Powered Crowdfunding</span>
                         </div>
                         <div className="flex items-center space-x-4">
-                            {/* <Link
-                                href="/kyc"
+                            <Link
+                                href="/verification"
                                 className="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium"
                             >
-                                
-                            </Link> */}
+                                Get Verified
+                            </Link>
                             <Link
                                 href="/dashboard"
                                 className="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium"

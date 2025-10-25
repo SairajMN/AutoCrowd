@@ -21,13 +21,16 @@ class BallerineSDKService {
         this.baseUrl = process.env.BALLERINE_ENDPOINT || 'https://api.ballerine.io';
         this.webhookUrl = process.env.BASE_URL ? `${process.env.BASE_URL}/api/kyc/ballerine-callback` : 'http://localhost:8000/api/kyc/ballerine-callback';
 
-        // Development mode
-        this.developmentMode = process.env.KYC_DEVELOPMENT_MODE === 'true' || process.env.NODE_ENV === 'development';
+        // Development mode - enable if no API key or explicitly set
+        this.developmentMode = process.env.KYC_DEVELOPMENT_MODE === 'true' ||
+            process.env.NODE_ENV === 'development' ||
+            !this.apiKey ||
+            this.apiKey === 'demo_key';
 
         // SDK configuration
         this.sdkConfig = {
             endpoint: this.baseUrl,
-            apiKey: this.apiKey,
+            apiKey: this.apiKey || 'demo_key',
             webhookUrl: this.webhookUrl,
             flowName: 'kyc-flow',
             elements: {
@@ -64,11 +67,6 @@ class BallerineSDKService {
             hasApiKey: !!this.apiKey,
             developmentMode: this.developmentMode
         });
-
-        if (!this.developmentMode && !this.apiKey) {
-            logger.warn('BALLERINE_API_KEY not configured - will use mock verification');
-            this.developmentMode = true; // Force development mode if no API key
-        }
     }
 
     /**

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 /**
- * Frontend API route for starting KYC verification using Veriff only
+ * Frontend API route for submitting custom KYC form
  */
 export async function POST(request: NextRequest) {
     try {
@@ -18,8 +18,8 @@ export async function POST(request: NextRequest) {
         // Get backend URL from environment or use default
         const backendUrl = process.env.BACKEND_API_URL || 'http://localhost:8000';
 
-        // Forward the request to the backend KYC service (Veriff only)
-        const response = await fetch(`${backendUrl}/api/kyc/start`, {
+        // Forward the request to the backend KYC service
+        const response = await fetch(`${backendUrl}/api/kyc/submit-form`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -36,23 +36,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json(data);
 
     } catch (error) {
-        console.error('Frontend KYC API proxy error:', error);
-
-        // During build time or when backend is unavailable, return mock response
-        // This prevents build failures while allowing the app to work in production
-        const isBuildTime = process.env.NODE_ENV === 'production' ||
-            process.env.NEXT_PHASE === 'phase-production-build' ||
-            (error as Error).message.includes('ECONNREFUSED');
-
-        if (isBuildTime) {
-            console.log('Backend unavailable during build/static generation, returning mock KYC start response');
-            return NextResponse.json({
-                sessionId: 'mock_session_' + Date.now(),
-                verificationUrl: 'https://api.veriff.com/mock',
-                status: 'mock_started'
-            });
-        }
-
+        console.error('Frontend KYC form API proxy error:', error);
         return NextResponse.json(
             { error: 'Internal server error', message: (error as Error).message },
             { status: 500 }

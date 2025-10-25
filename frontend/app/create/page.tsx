@@ -128,9 +128,10 @@ export default function CreateCampaignPage() {
             return
         }
 
-        // Require real Veriff KYC verification before creating campaign
+        // Check if user has NFT verification
         if (kycStatus !== 'verified') {
-            setShowKYCModal(true)
+            // Redirect to new verification form
+            router.push('/verification')
             return
         }
 
@@ -207,10 +208,10 @@ export default function CreateCampaignPage() {
                                 Home
                             </Link>
                             <Link
-                                href="/kyc"
+                                href="/verification"
                                 className="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium"
                             >
-                                KYC
+                                Get Verified
                             </Link>
                             <Link
                                 href="/dashboard"

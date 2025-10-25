@@ -51,7 +51,56 @@ export const useBallerineSDK = (): UseBallerineSDKReturn => {
     // Load Ballerine SDK
     useEffect(() => {
         const loadSDK = () => {
+            // Check if SDK is already available
             if (window.BallerineSDK) {
+                setIsSDKLoaded(true);
+                return;
+            }
+
+            // Check if we're in development/demo mode
+            const isDevelopmentMode = process.env.NODE_ENV === 'development' ||
+                process.env.NEXT_PUBLIC_BALLERINE_DEVELOPMENT_MODE === 'true' ||
+                !process.env.NEXT_PUBLIC_BALLERINE_API_KEY ||
+                process.env.NEXT_PUBLIC_BALLERINE_API_KEY === 'demo_key';
+
+            if (isDevelopmentMode) {
+                console.log('Ballerine SDK: Development mode detected, using mock SDK');
+                // Create mock SDK for development
+                window.BallerineSDK = class MockBallerineSDK {
+                    config: any;
+
+                    constructor(config: any) {
+                        console.log('Mock Ballerine SDK initialized with config:', config);
+                        this.config = config;
+                    }
+
+                    async start() {
+                        console.log('Mock Ballerine SDK: Starting verification...');
+                        return {
+                            sessionId: `mock_session_${Date.now()}`,
+                            status: 'pending'
+                        };
+                    }
+
+                    onSession(callback: Function) {
+                        console.log('Mock Ballerine SDK: Session callback registered');
+                    }
+
+                    onFinished(callback: Function) {
+                        console.log('Mock Ballerine SDK: Finished callback registered');
+                        // Simulate completion after 3 seconds
+                        setTimeout(() => {
+                            callback(null, {
+                                status: 'completed',
+                                sessionId: `mock_session_${Date.now()}`
+                            });
+                        }, 3000);
+                    }
+
+                    onEvent(callback: Function) {
+                        console.log('Mock Ballerine SDK: Event callback registered');
+                    }
+                };
                 setIsSDKLoaded(true);
                 return;
             }

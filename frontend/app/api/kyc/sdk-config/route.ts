@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 /**
- * Frontend API route for getting Veriff SDK configuration
+ * Frontend API route for getting Ballerine SDK configuration
  */
 export async function GET(request: NextRequest) {
     try {
@@ -31,12 +31,35 @@ export async function GET(request: NextRequest) {
             (error as Error).message.includes('ECONNREFUSED');
 
         if (isBuildTime) {
-            console.log('Backend unavailable during build/static generation, returning mock SDK config');
+            console.log('Backend unavailable during build/static generation, returning mock Ballerine SDK config');
             return NextResponse.json({
-                apiKey: process.env.VERIFF_API_KEY || 'mock-api-key',
-                baseUrl: 'https://api.veriff.com',
-                developmentMode: false,
-                webhookUrl: process.env.VERIFF_WEBHOOK_URL || 'https://auto-crowd-frontend.vercel.app/api/kyc/veriff-callback'
+                apiKey: process.env.BALLERINE_API_KEY || 'demo_key',
+                endpoint: process.env.BALLERINE_ENDPOINT || 'https://api.ballerine.io',
+                flowName: 'kyc-flow',
+                elements: {
+                    document: {
+                        name: 'document',
+                        type: 'document',
+                        options: {
+                            documents: [
+                                { type: 'passport', category: 'travel_document' },
+                                { type: 'drivers_license', category: 'government_id' },
+                                { type: 'id_card', category: 'government_id' },
+                                { type: 'visa', category: 'travel_document' }
+                            ]
+                        }
+                    },
+                    selfie: {
+                        name: 'selfie',
+                        type: 'selfie',
+                        options: {
+                            requireQuality: true,
+                            maxRetries: 3
+                        }
+                    }
+                },
+                developmentMode: true,
+                webhookUrl: process.env.BASE_URL || 'https://auto-crowd-backend.vercel.app/api/kyc/ballerine-callback'
             });
         }
 

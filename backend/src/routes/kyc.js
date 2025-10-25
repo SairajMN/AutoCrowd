@@ -29,46 +29,11 @@ const statusCheckSchema = Joi.object({
   walletAddress: Joi.string().pattern(/^0x[a-fA-F0-9]{40}$/).required()
 });
 
-/**
- * POST /api/kyc/start
- * Start KYC verification session using Ballerine only
- */
-router.post('/start', async (req, res) => {
-  try {
-    // Validate request
-    const { error, value } = startVerificationSchema.validate(req.body);
-    if (error) {
-      return res.status(400).json({
-        error: 'Validation error',
-        details: error.details[0].message
-      });
-    }
 
-    logger.info(`Starting Ballerine KYC verification for ${value.walletAddress}`);
-
-    // Start verification using Ballerine only
-    const verificationSession = await kycVerificationService.startVerification(
-      value.walletAddress,
-      value.userData || {}
-    );
-
-    res.json({
-      success: true,
-      data: verificationSession
-    });
-
-  } catch (error) {
-    logger.error('KYC start failed:', error);
-    res.status(500).json({
-      error: 'KYC verification start failed',
-      message: error.message
-    });
-  }
-});
 
 /**
  * GET /api/kyc/status/:walletAddress
- * Get KYC verification status for wallet address
+ * Get NFT verification status for wallet address
  */
 router.get('/status/:walletAddress', async (req, res) => {
   try {
@@ -81,139 +46,51 @@ router.get('/status/:walletAddress', async (req, res) => {
       });
     }
 
-    logger.info(`Checking KYC status for ${walletAddress}`);
+    logger.info(`Checking NFT verification status for ${walletAddress}`);
 
-    // Get verification status
-    const status = await kycVerificationService.getVerificationStatus(walletAddress);
+    // Check if user has completed verification (NFT minted)
+    const databaseService = require('../services/databaseService');
+    const { data: verification, error } = await databaseService.supabase
+      .from('creator_verifications')
+      .select('*')
+      .eq('wallet_address', walletAddress.toLowerCase())
+      .eq('status', 'completed')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single();
 
-    res.json({
-      success: true,
-      data: status
-    });
-
-  } catch (error) {
-    logger.error('KYC status check failed:', error);
-    res.status(500).json({
-      error: 'KYC status check failed',
-      message: error.message
-    });
-  }
-});
-
-/**
- * GET /api/kyc/session/:sessionId
- * Get verification session status
- */
-router.get('/session/:sessionId', async (req, res) => {
-  try {
-    const { sessionId } = req.params;
-
-    if (!sessionId) {
-      return res.status(400).json({
-        error: 'Session ID is required'
-      });
+    if (error && error.code !== 'PGRST116') {
+      throw error;
     }
 
-    logger.info(`Checking KYC session status for ${sessionId}`);
-
-    // Get session status
-    const status = await kycVerificationService.checkVerificationStatus(sessionId);
+    const isValid = verification !== null;
 
     res.json({
       success: true,
-      data: status
+      data: {
+        isValid,
+        walletAddress,
+        verificationType: verification?.verification_type || null,
+        provider: verification?.provider || null,
+        completedAt: verification?.completed_at || null,
+        verificationData: verification?.verification_data || null
+      }
     });
 
   } catch (error) {
-    logger.error('KYC session check failed:', error);
+    logger.error('NFT verification status check failed:', error);
     res.status(500).json({
-      error: 'KYC session check failed',
+      error: 'Verification status check failed',
       message: error.message
     });
   }
 });
 
-/**
- * POST /api/kyc/ballerine-callback
- * Handle Ballerine verification callback
- */
-router.post('/ballerine-callback', async (req, res) => {
-  try {
-    const signature = req.headers['x-signature'];
-    const timestamp = req.headers['x-timestamp'];
 
-    logger.info('Received Ballerine callback', {
-      hasSignature: !!signature,
-      hasTimestamp: !!timestamp,
-      contentType: req.headers['content-type'],
-      userAgent: req.headers['user-agent']
-    });
 
-    // Handle callback with signature verification
-    const ballerineSDKService = require('../services/ballerineSDKService');
-    const result = await ballerineSDKService.handleVerificationResult(
-      req.body.sessionId || req.body.id,
-      req.body
-    );
 
-    // Always return 200 OK to prevent retries
-    res.status(200).json({
-      success: true,
-      message: 'Callback processed',
-      data: result
-    });
 
-  } catch (error) {
-    logger.error('Ballerine callback processing failed:', error);
 
-    // Return 200 OK even on error to prevent retries
-    res.status(200).json({
-      success: false,
-      message: 'Callback processing failed',
-      error: error.message
-    });
-  }
-});
-
-/**
- * POST /api/kyc/veriff-callback
- * Handle Veriff verification callback with signature verification (legacy)
- */
-router.post('/veriff-callback', async (req, res) => {
-  try {
-    const signature = req.headers['x-signature'];
-    const timestamp = req.headers['x-timestamp'];
-
-    logger.info('Received Veriff callback (legacy)', {
-      hasSignature: !!signature,
-      hasTimestamp: !!timestamp,
-      contentType: req.headers['content-type'],
-      userAgent: req.headers['user-agent']
-    });
-
-    // Handle callback with signature verification
-    const result = await kycVerificationService.handleVerificationCallback(req.body, signature, timestamp);
-
-    // Always return 200 OK to prevent retries for invalid signatures
-    // Veriff expects 200 OK even for invalid requests to stop retries
-    res.status(200).json({
-      success: true,
-      message: 'Callback processed',
-      data: result
-    });
-
-  } catch (error) {
-    logger.error('Veriff callback processing failed:', error);
-
-    // Return 200 OK even on error to prevent Veriff from retrying
-    // This is important because Veriff will retry failed webhooks
-    res.status(200).json({
-      success: false,
-      message: 'Callback processing failed',
-      error: error.message
-    });
-  }
-});
 
 /**
  * GET /api/kyc/nft/:walletAddress
@@ -394,5 +271,214 @@ router.get('/stats', async (req, res) => {
     });
   }
 });
+
+/**
+ * POST /api/kyc/submit-form
+ * Submit custom KYC form data
+ */
+router.post('/submit-form', async (req, res) => {
+    try {
+        const {
+            walletAddress,
+            firstName,
+            lastName,
+            email,
+            phone,
+            country,
+            dateOfBirth
+        } = req.body;
+
+        // Validate required fields
+        if (!walletAddress || !firstName || !lastName || !email || !country || !dateOfBirth) {
+            return res.status(400).json({
+                error: 'Missing required fields',
+                message: 'walletAddress, firstName, lastName, email, country, and dateOfBirth are required'
+            });
+        }
+
+        // Validate wallet address format
+        if (!/^0x[a-fA-F0-9]{40}$/.test(walletAddress)) {
+            return res.status(400).json({
+                error: 'Invalid wallet address format'
+            });
+        }
+
+        logger.info(`Submitting custom KYC form for ${walletAddress}`);
+
+        const databaseService = require('../services/databaseService');
+
+        // Store the verification data in database
+        const { data: verification, error: insertError } = await databaseService.supabase
+            .from('creator_verifications')
+            .insert({
+                wallet_address: walletAddress.toLowerCase(),
+                status: 'completed',
+                verification_type: 'custom_form',
+                provider: 'custom_form',
+                verification_data: {
+                    firstName,
+                    lastName,
+                    email,
+                    phone,
+                    country,
+                    dateOfBirth
+                },
+                completed_at: new Date().toISOString(),
+                created_at: new Date().toISOString()
+            })
+            .select()
+            .single();
+
+        if (insertError) {
+            logger.error('Failed to store verification data:', insertError);
+            return res.status(500).json({
+                error: 'Failed to store verification data',
+                message: insertError.message
+            });
+        }
+
+        logger.info(`Custom KYC form submitted successfully for ${walletAddress}`);
+
+        res.json({
+            success: true,
+            message: 'KYC form submitted successfully',
+            data: {
+                id: verification.id,
+                walletAddress,
+                status: 'completed',
+                provider: 'custom_form',
+                submittedAt: verification.created_at
+            }
+        });
+
+    } catch (error) {
+        logger.error('Failed to submit KYC form:', error);
+        res.status(500).json({
+            error: 'Failed to submit KYC form',
+            message: error.message
+        });
+    }
+});
+
+/**
+ * POST /api/kyc/verify-and-mint
+ * Mint NFT and update KYC status on blockchain for verified user
+ */
+router.post('/verify-and-mint', async (req, res) => {
+    try {
+        const { walletAddress, kycProvider, verificationLevel, metadataURI, userData } = req.body;
+
+        // Validate required fields
+        if (!walletAddress || !kycProvider || !verificationLevel) {
+            return res.status(400).json({
+                error: 'Missing required fields',
+                message: 'walletAddress, kycProvider, and verificationLevel are required'
+            });
+        }
+
+        // Validate wallet address format
+        if (!/^0x[a-fA-F0-9]{40}$/.test(walletAddress)) {
+            return res.status(400).json({
+                error: 'Invalid wallet address format'
+            });
+        }
+
+        logger.info(`Processing NFT mint and KYC update for ${walletAddress} with provider ${kycProvider}`);
+
+        const blockchainService = require('../services/blockchainService');
+
+        // Check if user already has NFT
+        const hasExistingNFT = await blockchainService.hasVerificationNFT(walletAddress);
+
+        if (hasExistingNFT) {
+            logger.info(`User ${walletAddress} already has NFT, updating KYC status only`);
+
+            // Just update KYC status since NFT already exists
+            const kycResult = await blockchainService.setKYCStatus(walletAddress, true);
+
+            return res.json({
+                success: true,
+                message: 'KYC status updated successfully',
+                transactionHash: kycResult.transactionHash,
+                tokenId: null,
+                kycStatusUpdated: true,
+                alreadyExists: true,
+                walletAddress,
+                kycProvider,
+                verificationLevel,
+                metadataURI
+            });
+        }
+
+        // Generate metadata URI if not provided and we have user data
+        let finalMetadataURI = metadataURI;
+        if (!finalMetadataURI && userData) {
+            finalMetadataURI = `data:application/json;base64,${Buffer.from(JSON.stringify({
+                name: "AutoCrowd Creator Verification",
+                description: "Verified creator badge for AutoCrowd platform",
+                external_url: "https://autocrowd.app",
+                attributes: [
+                    {
+                        trait_type: "Verification Provider",
+                        value: kycProvider
+                    },
+                    {
+                        trait_type: "Verification Level",
+                        value: verificationLevel
+                    },
+                    {
+                        trait_type: "Verified Name",
+                        value: `${userData.firstName} ${userData.lastName}`
+                    },
+                    {
+                        trait_type: "Country",
+                        value: userData.country
+                    }
+                ]
+            })).toString('base64')}`;
+        }
+
+        // Mint new NFT and update KYC status
+        logger.info(`Minting new NFT for ${walletAddress}`);
+        const mintResult = await blockchainService.mintVerificationNFT(
+            walletAddress,
+            kycProvider,
+            verificationLevel,
+            finalMetadataURI
+        );
+
+        logger.info(`NFT minted successfully for ${walletAddress}, updating KYC status`);
+        const kycResult = await blockchainService.setKYCStatus(walletAddress, true);
+
+        logger.info(`KYC status updated successfully for ${walletAddress}`);
+
+        res.json({
+            success: true,
+            message: 'NFT minted and KYC status updated successfully',
+            transactionHash: mintResult.transactionHash,
+            tokenId: mintResult.tokenId,
+            kycStatusUpdated: true,
+            walletAddress,
+            kycProvider,
+            verificationLevel,
+            metadataURI: finalMetadataURI,
+            mintResult,
+            kycResult: {
+                transactionHash: kycResult.transactionHash,
+                blockNumber: kycResult.blockNumber,
+                gasUsed: kycResult.gasUsed
+            }
+        });
+
+    } catch (error) {
+        logger.error('Failed to mint NFT and update KYC status:', error);
+        res.status(500).json({
+            error: 'Failed to mint NFT and update KYC status',
+            message: error.message
+        });
+    }
+});
+
+
 
 module.exports = router;

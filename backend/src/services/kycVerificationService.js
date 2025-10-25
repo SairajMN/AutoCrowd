@@ -195,81 +195,7 @@ class KYCVerificationService {
 
 
 
-  /**
-   * Initiate Veriff verification (Updated to v2 API specification)
-   */
-  async initiateVeriffVerification(session) {
-    // Try multiple endpoints in case of connectivity issues
-    for (const endpoint of this.veriffEndpoints) {
-      try {
-        logger.info(`Trying Veriff endpoint: ${endpoint}`);
-        const result = await this.tryVeriffEndpoint(endpoint, session);
-        return result;
-      } catch (error) {
-        logger.warn(`Failed to connect to ${endpoint}:`, error.message);
-        if (endpoint === this.veriffEndpoints[this.veriffEndpoints.length - 1]) {
-          // Last endpoint failed, throw the error
-          throw error;
-        }
-        // Continue to next endpoint
-        continue;
-      }
-    }
-  }
 
-  /**
-   * Try a specific Veriff endpoint
-   */
-  async tryVeriffEndpoint(endpoint, session) {
-    const timestamp = Math.floor(Date.now() / 1000);
-    const signature = crypto
-      .createHmac('sha256', this.veriffApiSecret)
-      .update(`${this.veriffApiKey}:${timestamp}`)
-      .digest('hex');
-
-    // Updated request body structure for v2 API
-    const requestBody = {
-      verification: {
-        callback: `${process.env.BASE_URL || 'http://localhost:8000'}/api/kyc/veriff-callback`,
-        person: {
-          firstName: session.userData.firstName || 'Unknown',
-          lastName: session.userData.lastName || 'Unknown'
-        },
-        document: {
-          type: 'PASSPORT'
-        },
-        vendorData: session.sessionId,
-        additionalData: {
-          sessionId: session.sessionId,
-          walletAddress: session.walletAddress,
-          timestamp: timestamp
-        }
-      }
-    };
-
-    logger.debug(`Initiating Veriff session for ${session.sessionId} at ${endpoint}`);
-
-    const response = await axios.post(
-      `${endpoint}/v2/sessions`,
-      requestBody,
-      {
-        headers: {
-          'Content-Type': 'application/json',
-          'X-AUTH-CLIENT': this.veriffApiKey,
-          'X-SIGNATURE': signature,
-          'X-HMAC-SIGNATURE': signature
-        },
-        timeout: 30000
-      }
-    );
-
-    if (!response.data.verification?.url) {
-      throw new Error('Invalid Veriff API response: missing verification URL');
-    }
-
-    logger.info(`Veriff session created successfully at ${endpoint}: ${response.data.verification.sessionToken}`);
-    return response.data.verification.url;
-  }
 
 
 
@@ -296,7 +222,7 @@ class KYCVerificationService {
       let statusMessage = '';
 
       if (status === 'pending') {
-        statusMessage = 'Waiting for Veriff identity verification to complete';
+        statusMessage = 'Waiting for Ballerine identity verification to complete';
       } else if (status === 'verified') {
         statusMessage = 'Verification completed successfully';
       } else if (status === 'rejected') {
@@ -313,7 +239,7 @@ class KYCVerificationService {
         expiresAt: session.expires_at,
         verificationData: session.verification_data,
         message: statusMessage,
-        provider: 'veriff'
+        provider: 'ballerine'
       };
     } catch (error) {
       logger.error('Failed to check verification status:', error);
@@ -322,10 +248,10 @@ class KYCVerificationService {
   }
 
   /**
-   * Handle Veriff verification callback (webhook from Veriff)
-   * @param {Object} callbackData - Callback data from Veriff
-   * @param {string} signature - Webhook signature from Veriff
-   * @param {string} timestamp - Webhook timestamp from Veriff
+   * Handle Ballerine verification callback (webhook from Ballerine)
+   * @param {Object} callbackData - Callback data from Ballerine
+   * @param {string} signature - Webhook signature from Ballerine
+   * @param {string} timestamp - Webhook timestamp from Ballerine
    */
   async handleVerificationCallback(callbackData, signature, timestamp) {
     const startTime = Date.now();
@@ -333,67 +259,35 @@ class KYCVerificationService {
 
     try {
       // Extract session ID for logging
-      sessionId = callbackData?.vendorData?.sessionId || callbackData?.vendorData || 'unknown';
+      sessionId = callbackData?.sessionId || callbackData?.id || 'unknown';
 
-      logger.info('Received Veriff webhook callback', {
+      logger.info('Received Ballerine webhook callback', {
         hasSignature: !!signature,
         hasTimestamp: !!timestamp,
         sessionId,
-        eventType: callbackData?.action || 'unknown'
+        eventType: callbackData?.status || 'unknown'
       });
 
-      // Verify webhook signature for security
-      if (!this.verifyWebhookSignature(callbackData, signature, timestamp)) {
-        logger.error('Invalid webhook signature - potential security threat', {
-          sessionId,
-          signature: signature?.substring(0, 10) + '...',
-          timestamp
-        });
-
-        // Log security event
-        await this.logSecurityEvent('invalid_webhook_signature', {
-          sessionId,
-          signature: signature?.substring(0, 10) + '...',
-          timestamp,
-          userAgent: 'veriff-webhook',
-          ip: 'webhook'
-        });
-
-        return { success: false, error: 'Invalid webhook signature' };
-      }
-
-      // Handle different webhook event types
-      const eventType = callbackData?.action || 'decision_made';
-      let result;
-
-      switch (eventType) {
-        case 'decision_made':
-          result = await this.handleDecisionEvent(callbackData);
-          break;
-        case 'session_started':
-          result = await this.handleSessionStartedEvent(callbackData);
-          break;
-        case 'session_finished':
-          result = await this.handleSessionFinishedEvent(callbackData);
-          break;
-        default:
-          logger.warn(`Unknown webhook event type: ${eventType}`, { sessionId });
-          result = { success: true, message: 'Event type not handled', eventType };
-      }
+      // Process Ballerine callback
+      await ballerineSDKService.handleVerificationResult(sessionId, callbackData);
 
       const processingTime = Date.now() - startTime;
-      logger.info(`Webhook processed successfully`, {
+      logger.info(`Ballerine webhook processed successfully`, {
         sessionId,
-        eventType,
         processingTime: `${processingTime}ms`,
-        status: result?.status || 'unknown'
+        status: callbackData?.status || 'unknown'
       });
 
-      return result;
+      return {
+        success: true,
+        sessionId,
+        status: callbackData?.status || 'unknown',
+        processingTime: `${processingTime}ms`
+      };
 
     } catch (error) {
       const processingTime = Date.now() - startTime;
-      logger.error('Verification callback processing failed:', {
+      logger.error('Ballerine callback processing failed:', {
         error: error.message,
         sessionId,
         processingTime: `${processingTime}ms`,
@@ -405,7 +299,7 @@ class KYCVerificationService {
         await databaseService.logVerificationAttempt({
           sessionId,
           attemptType: 'webhook_callback_failed',
-          provider: 'veriff',
+          provider: 'ballerine',
           status: 'failed',
           errorMessage: error.message,
           metadata: {
@@ -452,110 +346,7 @@ class KYCVerificationService {
     }
   }
 
-  /**
-   * Verify webhook signature from Veriff
-   * @param {Object} payload - The webhook payload
-   * @param {string} signature - The signature from Veriff
-   * @param {string} timestamp - The timestamp from Veriff
-   * @returns {boolean} True if signature is valid
-   */
-  verifyWebhookSignature(payload, signature, timestamp) {
-    try {
-      // Skip verification in development mode if explicitly disabled
-      if (this.developmentMode && process.env.SKIP_WEBHOOK_VERIFICATION === 'true') {
-        logger.warn('Webhook signature verification skipped in development mode');
-        return true;
-      }
 
-      if (!signature || !timestamp || !this.veriffApiSecret) {
-        logger.error('Missing required parameters for signature verification');
-        return false;
-      }
-
-      // Create the expected signature
-      // Veriff uses HMAC-SHA256 with the API secret
-      const payloadString = JSON.stringify(payload);
-      const message = timestamp + '.' + payloadString;
-      const expectedSignature = crypto
-        .createHmac('sha256', this.veriffApiSecret)
-        .update(message)
-        .digest('hex');
-
-      // Compare signatures (use timing-safe comparison)
-      const isValid = crypto.timingSafeEqual(
-        Buffer.from(signature, 'hex'),
-        Buffer.from(expectedSignature, 'hex')
-      );
-
-      if (!isValid) {
-        logger.error('Webhook signature verification failed', {
-          receivedSignature: signature,
-          expectedSignature: expectedSignature,
-          timestamp
-        });
-      } else {
-        logger.debug('Webhook signature verified successfully');
-      }
-
-      return isValid;
-    } catch (error) {
-      logger.error('Error verifying webhook signature:', error);
-      return false;
-    }
-  }
-
-  /**
-   * Process Veriff callback (Updated for v2 API webhook format)
-   */
-  processVeriffCallback(callbackData) {
-    try {
-      // Extract session ID from vendorData (can be string or object in v2)
-      let sessionId;
-      if (typeof callbackData.vendorData === 'string') {
-        sessionId = callbackData.vendorData;
-      } else if (callbackData.vendorData && callbackData.vendorData.sessionId) {
-        sessionId = callbackData.vendorData.sessionId;
-      } else {
-        throw new Error('Invalid vendorData format in Veriff callback');
-      }
-
-      // Map Veriff decision to our status format
-      let status = 'rejected'; // Default to rejected
-      if (callbackData.verification?.decision) {
-        const decision = callbackData.verification.decision;
-        if (decision === 'approved' || decision === 'accept') {
-          status = 'verified';
-        } else if (decision === 'declined' || decision === 'reject') {
-          status = 'rejected';
-        } else {
-          status = 'pending'; // For cases like 'resubmission_requested'
-        }
-      }
-
-      // Extract verification details according to v2 API structure
-      const verificationData = {
-        provider: 'veriff',
-        status: callbackData.verification?.status || 'unknown',
-        decision: callbackData.verification?.decision || 'unknown',
-        reason: callbackData.verification?.reason || null,
-        person: callbackData.verification?.person || null,
-        document: callbackData.verification?.document || null,
-        biometrics: callbackData.verification?.biometrics || null,
-        sessionToken: callbackData.verification?.sessionToken || null,
-        sessionId: callbackData.verification?.sessionId || null,
-        additionalData: callbackData.verification?.additionalData || null,
-        callbackTimestamp: new Date().toISOString(),
-        rawData: callbackData
-      };
-
-      logger.debug(`Processed Veriff callback: session ${sessionId}, decision: ${verificationData.decision}, status: ${status}`);
-
-      return { sessionId, status, verificationData };
-    } catch (error) {
-      logger.error('Error processing Veriff callback:', error);
-      throw new Error(`Failed to process Veriff callback: ${error.message}`);
-    }
-  }
 
 
 
@@ -604,37 +395,7 @@ class KYCVerificationService {
     }
   }
 
-  /**
-   * Retrieve Veriff session details (v2 API)
-   * @param {string} sessionId - Veriff session ID
-   * @returns {Object} Session details from Veriff
-   */
-  async retrieveVeriffSession(sessionId) {
-    try {
-      const timestamp = Math.floor(Date.now() / 1000);
-      const signature = crypto
-        .createHmac('sha256', this.veriffApiSecret)
-        .update(`${this.veriffApiKey}:${timestamp}`)
-        .digest('hex');
 
-      const response = await axios.get(
-        `${this.veriffEndpoint}/v2/sessions/${sessionId}`,
-        {
-          headers: {
-            'X-AUTH-CLIENT': this.veriffApiKey,
-            'X-SIGNATURE': signature
-          },
-          timeout: 30000
-        }
-      );
-
-      return response.data;
-
-    } catch (error) {
-      logger.error('Failed to retrieve Veriff session:', error.response?.data || error.message);
-      throw new Error(`Veriff API error: ${error.response?.data?.error || error.message}`);
-    }
-  }
 
   /**
    * Generate unique session ID
@@ -850,187 +611,7 @@ class KYCVerificationService {
     }
   }
 
-  /**
-   * Handle decision made webhook event
-   */
-  async handleDecisionEvent(callbackData) {
-    try {
-      const { sessionId, status, verificationData } = this.processVeriffCallback(callbackData);
 
-      // Get session from database
-      const session = await databaseService.getCreatorVerification(sessionId);
-      if (!session) {
-        logger.warn(`Session ${sessionId} not found for decision event`);
-        return { success: false, error: 'Session not found' };
-      }
-
-      // Update verification with final status
-      await databaseService.updateCreatorVerification(sessionId, {
-        status,
-        verificationData,
-        completedAt: new Date()
-      });
-
-      // Update SDK service session status
-      const sdkSessionStatus = veriffSDKService.getSessionStatus(sessionId);
-      if (sdkSessionStatus) {
-        sdkSessionStatus.status = status;
-        sdkSessionStatus.verificationResult = verificationData;
-        sdkSessionStatus.completedAt = new Date();
-      }
-
-      // If verification successful, update blockchain and mint NFT
-      if (status === 'verified') {
-        await this.updateBlockchainKYCStatus(session.wallet_address, true);
-        await this.mintVerificationNFT(session);
-      }
-
-      // Log the decision event
-      await databaseService.logVerificationAttempt({
-        sessionId,
-        attemptType: 'webhook_decision_event',
-        provider: 'veriff',
-        status: status === 'verified' ? 'success' : 'completed',
-        metadata: {
-          decision: verificationData.decision,
-          reason: verificationData.reason,
-          callbackData: verificationData
-        }
-      });
-
-      logger.info(`Decision event processed: ${status} for session ${sessionId}`);
-
-      return {
-        success: true,
-        sessionId,
-        status,
-        walletAddress: session.wallet_address,
-        verificationData,
-        eventType: 'decision_made'
-      };
-
-    } catch (error) {
-      logger.error('Failed to handle decision event:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Handle session started webhook event
-   */
-  async handleSessionStartedEvent(callbackData) {
-    try {
-      const { sessionId } = this.processVeriffCallback(callbackData);
-
-      // Get session from database
-      const session = await databaseService.getCreatorVerification(sessionId);
-      if (!session) {
-        logger.warn(`Session ${sessionId} not found for session started event`);
-        return { success: false, error: 'Session not found' };
-      }
-
-      // Update session status to started
-      await databaseService.updateCreatorVerification(sessionId, {
-        status: 'started',
-        verificationData: {
-          ...session.verification_data,
-          startedAt: new Date().toISOString()
-        }
-      });
-
-      // Log the session started event
-      await databaseService.logVerificationAttempt({
-        sessionId,
-        attemptType: 'webhook_session_started',
-        provider: 'veriff',
-        status: 'success',
-        metadata: { callbackData }
-      });
-
-      logger.info(`Session started event processed for session ${sessionId}`);
-
-      return {
-        success: true,
-        sessionId,
-        status: 'started',
-        walletAddress: session.wallet_address,
-        eventType: 'session_started'
-      };
-
-    } catch (error) {
-      logger.error('Failed to handle session started event:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Handle session finished webhook event
-   */
-  async handleSessionFinishedEvent(callbackData) {
-    try {
-      const { sessionId } = this.processVeriffCallback(callbackData);
-
-      // Get session from database
-      const session = await databaseService.getCreatorVerification(sessionId);
-      if (!session) {
-        logger.warn(`Session ${sessionId} not found for session finished event`);
-        return { success: false, error: 'Session not found' };
-      }
-
-      // Update session status to finished
-      await databaseService.updateCreatorVerification(sessionId, {
-        status: 'finished',
-        verificationData: {
-          ...session.verification_data,
-          finishedAt: new Date().toISOString()
-        }
-      });
-
-      // Log the session finished event
-      await databaseService.logVerificationAttempt({
-        sessionId,
-        attemptType: 'webhook_session_finished',
-        provider: 'veriff',
-        status: 'success',
-        metadata: { callbackData }
-      });
-
-      logger.info(`Session finished event processed for session ${sessionId}`);
-
-      return {
-        success: true,
-        sessionId,
-        status: 'finished',
-        walletAddress: session.wallet_address,
-        eventType: 'session_finished'
-      };
-
-    } catch (error) {
-      logger.error('Failed to handle session finished event:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Log security events for monitoring and debugging
-   */
-  async logSecurityEvent(eventType, eventData) {
-    try {
-      logger.warn(`Security event: ${eventType}`, eventData);
-
-      // Log to database if available
-      await databaseService.logVerificationAttempt({
-        sessionId: eventData.sessionId || 'security_event',
-        attemptType: `security_${eventType}`,
-        provider: 'veriff',
-        status: 'security_event',
-        metadata: eventData
-      });
-
-    } catch (error) {
-      logger.error('Failed to log security event:', error);
-    }
-  }
 }
 
 module.exports = new KYCVerificationService();
