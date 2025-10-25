@@ -36,5 +36,8 @@
     "dependencies": {
         "@modelcontextprotocol/sdk": "^1.20.1",
         "@supabase/supabase-js": "^2.76.1"
+    },
+    "resolutions": {
+        "@noble/hashes": "1.4.0"
     }
 }
