@@ -1,6 +1,15 @@
 {
-    "buildCommand": "cd frontend && npm run build",
+    "buildCommand": "npx turbo build --filter=frontend",
     "installCommand": "npm install",
     "framework": "nextjs",
-    "rootDirectory": "frontend"
+    "outputDirectory": "frontend/.next",
+    "functions": {
+        "backend/src/index.js": {
+            "maxDuration": 30,
+            "memory": 1024
+        }
+    },
+    "regions": [
+        "sin1"
+    ]
 }

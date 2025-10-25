@@ -9,7 +9,12 @@
     ],
     "scripts": {
         "build": "turbo build",
+        "build:frontend": "turbo build --filter=frontend",
+        "build:backend": "turbo build --filter=backend",
+        "build:contracts": "turbo build --filter=contracts",
         "dev": "turbo dev",
+        "dev:frontend": "turbo dev --filter=frontend",
+        "dev:backend": "turbo dev --filter=backend",
         "test": "turbo test",
         "deploy:contracts": "turbo deploy:contracts",
         "lint": "turbo lint",

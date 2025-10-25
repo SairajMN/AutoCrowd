@@ -21,6 +21,13 @@ const nextConfig = {
         }
         return []
     },
+    // Disable static optimization for pages that depend on API routes during build
+    experimental: {
+        // This helps prevent API routes from being called during static generation
+        serverComponentsExternalPackages: [],
+    },
+    // Configure output for better production builds
+    output: 'standalone',
     webpack: (config, { isServer }) => {
         // Ensure problematic native/react-native modules are never bundled
         config.resolve.alias = {
