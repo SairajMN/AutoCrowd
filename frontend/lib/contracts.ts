@@ -3,6 +3,7 @@ import { ethers } from 'ethers';
 // Contract addresses - these should be deployed contract addresses
 export const CONTRACT_ADDRESSES = {
     CAMPAIGN_FACTORY: process.env.NEXT_PUBLIC_CAMPAIGN_FACTORY_ADDRESS || '',
+    CAMPAIGN_MASTER_NFT: process.env.NEXT_PUBLIC_AI_HANDLER_ADDRESS || '', // NFT contract
     PYUSD: process.env.NEXT_PUBLIC_PYUSD_CONTRACT_ADDRESS || '',
 };
 
@@ -340,6 +341,94 @@ export const PYUSD_ABI = [
         "name": "allowance",
         "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }],
         "stateMutability": "view",
+        "type": "function"
+    }
+] as const;
+
+// CampaignMasterNFT ABI
+export const CAMPAIGN_MASTER_NFT_ABI = [
+    {
+        "inputs": [{ "internalType": "address", "name": "_campaignFactory", "type": "address" }],
+        "stateMutability": "nonpayable",
+        "type": "constructor"
+    },
+    {
+        "inputs": [],
+        "name": "campaignFactory",
+        "outputs": [{ "internalType": "address", "name": "", "type": "address" }],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            { "internalType": "address", "name": "_recipient", "type": "address" },
+            { "internalType": "string", "name": "_kycProvider", "type": "string" },
+            { "internalType": "string", "name": "_verificationLevel", "type": "string" },
+            { "internalType": "string", "name": "_metadataURI", "type": "string" }
+        ],
+        "name": "mintNFT",
+        "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [{ "internalType": "address", "name": "_wallet", "type": "address" }],
+        "name": "hasNFT",
+        "outputs": [{ "internalType": "bool", "name": "", "type": "bool" }],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [{ "internalType": "address", "name": "_wallet", "type": "address" }],
+        "name": "getTokenId",
+        "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [{ "internalType": "uint256", "name": "_tokenId", "type": "uint256" }],
+        "name": "getVerificationDetails",
+        "outputs": [
+            { "internalType": "address", "name": "walletAddress", "type": "address" },
+            { "internalType": "uint256", "name": "verifiedAt", "type": "uint256" },
+            { "internalType": "string", "name": "kycProvider", "type": "string" },
+            { "internalType": "string", "name": "verificationLevel", "type": "string" },
+            { "internalType": "string", "name": "metadataURI", "type": "string" },
+            { "internalType": "bool", "name": "isActive", "type": "bool" }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [{ "internalType": "uint256", "name": "_tokenId", "type": "uint256" }],
+        "name": "tokenDetails",
+        "outputs": [
+            { "internalType": "address", "name": "walletAddress", "type": "address" },
+            { "internalType": "uint256", "name": "verifiedAt", "type": "uint256" },
+            { "internalType": "string", "name": "kycProvider", "type": "string" },
+            { "internalType": "string", "name": "verificationLevel", "type": "string" },
+            { "internalType": "string", "name": "metadataURI", "type": "string" },
+            { "internalType": "bool", "name": "isActive", "type": "bool" }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "anonymous": false,
+        "inputs": [
+            { "indexed": true, "internalType": "address", "name": "recipient", "type": "address" },
+            { "indexed": true, "internalType": "uint256", "name": "tokenId", "type": "uint256" },
+            { "indexed": false, "internalType": "string", "name": "kycProvider", "type": "string" },
+            { "indexed": false, "internalType": "string", "name": "verificationLevel", "type": "string" }
+        ],
+        "name": "NFTMinted",
+        "type": "event"
+    },
+    {
+        "inputs": [{ "internalType": "address", "name": "_wallet", "type": "address" }],
+        "name": "revokeNFT",
+        "outputs": [],
+        "stateMutability": "nonpayable",
         "type": "function"
     }
 ] as const;

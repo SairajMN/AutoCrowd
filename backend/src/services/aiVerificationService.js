@@ -1,5 +1,6 @@
 const axios = require('axios');
 const winston = require('winston');
+const databaseService = require('./databaseService');
 
 const logger = winston.createLogger({
   level: process.env.LOG_LEVEL || 'info',
@@ -12,13 +13,29 @@ const logger = winston.createLogger({
 
 class AIVerificationService {
   constructor() {
+    // ASI Configuration
     this.asiApiKey = process.env.ASI_API_KEY;
     this.asiEndpoint = process.env.ASI_ENDPOINT || 'https://api.asi.one';
     this.mettaUrl = process.env.METTA_KNOWLEDGE_GRAPH_URL || 'https://metta.asi.one';
     this.agentVerseUrl = process.env.AGENT_VERSE_URL || 'https://agentverse.asi.one';
+
+    // AgentVerse Configuration (from Fetch.ai)
+    this.agentVerseToken = process.env.AGENTVERSE_ACCESS_TOKEN;
+    this.agentVerseUrl = process.env.AGENT_VERSE_URL || 'https://agentverse.asi.one';
+
+    // Fetch.ai Configuration (Optional)
+    this.fetchApiKey = process.env.FETCH_AI_API_KEY;
+    this.fetchEndpoint = process.env.FETCH_AI_ENDPOINT || 'https://api.fetch.ai';
+    this.fetchAgentUrl = process.env.FETCH_AI_AGENT_URL || 'https://agents.fetch.ai';
+    this.fetchSmartContract = process.env.FETCH_AI_CONTRACT_ADDRESS;
+
     this.confidenceThreshold = parseFloat(process.env.CONFIDENCE_THRESHOLD) || 0.8;
     this.maxRetryAttempts = parseInt(process.env.MAX_RETRY_ATTEMPTS) || 3;
     this.verificationTimeout = parseInt(process.env.VERIFICATION_TIMEOUT) || 120000; // 2 minutes
+
+    // AI Provider selection
+    this.primaryProvider = process.env.PRIMARY_AI_PROVIDER || 'asi'; // 'asi' or 'fetch'
+    this.fallbackProvider = process.env.FALLBACK_AI_PROVIDER || 'fetch'; // Fallback if primary fails
 
     // Real-time data integrations
     this.pyusdApiUrl = process.env.PYUSD_API_URL || 'https://api.coinbase.com/v2/exchange-rates?currency=USD';
@@ -48,15 +65,23 @@ class AIVerificationService {
 
   async initialize() {
     logger.info('Initializing AI Verification Service...');
-    logger.info(`ASI API Key configured: ${this.asiApiKey ? 'YES' : 'NO'}`);
-    logger.info(`ASI Endpoint: ${this.asiEndpoint}`);
-    logger.info(`MeTTa URL: ${this.mettaUrl}`);
-    logger.info(`AgentVerse URL: ${this.agentVerseUrl}`);
+    logger.info(`Primary AI Provider: ${this.primaryProvider.toUpperCase()}`);
+    logger.info(`Fallback AI Provider: ${this.fallbackProvider.toUpperCase()}`);
 
-    if (!this.asiApiKey) {
-      logger.warn('ASI_API_KEY not provided, using mock verification for development');
-    } else {
+    // Check ASI configuration
+    logger.info(`ASI API Key configured: ${this.asiApiKey ? 'YES' : 'NO'}`);
+    if (this.asiApiKey) {
       logger.info('ASI API key is configured - will use real ASI APIs for verification');
+    }
+
+    // Check Fetch.ai configuration
+    logger.info(`Fetch.ai API Key configured: ${this.fetchApiKey ? 'YES' : 'NO'}`);
+    if (this.fetchApiKey) {
+      logger.info('Fetch.ai API key is configured - will use Fetch.ai network for verification');
+    }
+
+    if (!this.asiApiKey && !this.fetchApiKey) {
+      logger.warn('Neither ASI nor Fetch.ai API keys provided, using mock verification for development');
     }
 
     // Initialize real-time data services
@@ -1283,43 +1308,94 @@ getRealtimeVerificationContext(campaignAddress, contributorAddress) {
 }
 
   /**
-   * Enhanced verification with real-time context
+   * Enhanced verification with real-time context and database storage
    */
   async verifyMilestoneWithRealtimeData(submission) {
   logger.info(`Starting enhanced AI verification with real-time data for milestone ${submission.milestoneId}`);
 
-  // Get real-time context
-  const realtimeContext = this.getRealtimeVerificationContext(
-    submission.campaignAddress,
-    submission.submitterAddress
-  );
+  try {
+    // Get real-time context
+    const realtimeContext = this.getRealtimeVerificationContext(
+      submission.campaignAddress,
+      submission.submitterAddress
+    );
 
-  // Enhance submission with real-time data
-  const enhancedSubmission = {
-    ...submission,
-    realtimeContext,
-    riskAssessment: await this.performRealtimeRiskAssessment(submission, realtimeContext)
-  };
+    // Enhance submission with real-time data
+    const enhancedSubmission = {
+      ...submission,
+      realtimeContext,
+      riskAssessment: await this.performRealtimeRiskAssessment(submission, realtimeContext)
+    };
 
-  // Use enhanced AI verification (existing ASI services with realtime context)
-  const verificationResult = await this.verifyMilestone(enhancedSubmission);
+    // Use enhanced AI verification (existing ASI services with realtime context)
+    const verificationResult = await this.verifyMilestone(enhancedSubmission);
 
-  // Add real-time insights to reasoning
-  const enhancedReasoning = this.enhanceReasoningWithRealtimeData(
-    verificationResult.reasoning,
-    realtimeContext,
-    verificationResult.confidence
-  );
+    // Add real-time insights to reasoning
+    const enhancedReasoning = this.enhanceReasoningWithRealtimeData(
+      verificationResult.reasoning,
+      realtimeContext,
+      verificationResult.confidence
+    );
 
-  return {
-    ...verificationResult,
-    reasoning: enhancedReasoning,
-    realtimeData: {
-      usedDataTypes: ['pyusd_price', 'contributor_stats', 'verification_patterns', 'market_data'],
-      freshness: realtimeContext.timestamp,
-      riskAssessment: enhancedSubmission.riskAssessment
+    const finalResult = {
+      ...verificationResult,
+      reasoning: enhancedReasoning,
+      realtimeData: {
+        usedDataTypes: ['pyusd_price', 'contributor_stats', 'verification_patterns', 'market_data'],
+        freshness: realtimeContext.timestamp,
+        riskAssessment: enhancedSubmission.riskAssessment
+      }
+    };
+
+    // Store verification result in database
+    try {
+      await databaseService.createAIVerification({
+        requestId: `ai_${submission.milestoneId}_${Date.now()}`,
+        campaignAddress: submission.campaignAddress,
+        milestoneId: parseInt(submission.milestoneId),
+        submitterAddress: submission.submitterAddress,
+        evidenceHash: submission.evidenceHash,
+        description: submission.description,
+        evidenceUrl: submission.evidenceUrl,
+        verdict: finalResult.verdict,
+        confidence: finalResult.confidence,
+        reasoning: finalResult.reasoning,
+        scamAnalysis: finalResult.realtimeData?.riskAssessment || {},
+        realtimeData: finalResult.realtimeData
+      });
+
+      logger.info(`AI verification result stored in database for milestone ${submission.milestoneId}`);
+    } catch (dbError) {
+      logger.error('Failed to store AI verification result in database:', dbError);
+      // Don't fail the verification if database storage fails
     }
-  };
+
+    return finalResult;
+
+  } catch (error) {
+    logger.error(`Enhanced AI verification failed for milestone ${submission.milestoneId}:`, error);
+
+    // Store failed verification attempt
+    try {
+      await databaseService.createAIVerification({
+        requestId: `ai_${submission.milestoneId}_${Date.now()}_failed`,
+        campaignAddress: submission.campaignAddress,
+        milestoneId: parseInt(submission.milestoneId),
+        submitterAddress: submission.submitterAddress,
+        evidenceHash: submission.evidenceHash,
+        description: submission.description,
+        verdict: 'error',
+        confidence: 0.0,
+        reasoning: `Verification failed: ${error.message}`,
+        scamAnalysis: {},
+        realtimeData: {}
+      });
+    } catch (dbError) {
+      logger.error('Failed to store failed verification in database:', dbError);
+    }
+
+    throw error;
+  }
 }
 
   /**
@@ -1541,7 +1617,7 @@ getStabilityText(stability) {
 }
 
   /**
-   * Verify a milestone submission using ASI agents
+   * Verify a milestone submission using AI providers (ASI/Fetch.ai)
    * @param {Object} submission - Milestone submission data
    * @param {string} submission.milestoneId - Milestone ID
    * @param {string} submission.campaignAddress - Campaign contract address
@@ -1551,137 +1627,326 @@ getStabilityText(stability) {
    * @returns {Object} Verification result
    */
   async verifyMilestone(submission) {
-  logger.info(`Starting AI verification for milestone ${submission.milestoneId}`);
+    logger.info(`Starting AI verification for milestone ${submission.milestoneId} using ${this.primaryProvider}`);
 
-  try {
-    // If no ASI API key, use mock verification for development
-    if (!this.asiApiKey) {
-      return await this.mockVerification(submission);
+    try {
+      let result;
+
+      // Try primary provider first
+      if (this.primaryProvider === 'asi' && this.asiApiKey) {
+        result = await this.verifyWithASI(submission);
+      } else if (this.primaryProvider === 'fetch' && this.fetchApiKey) {
+        result = await this.verifyWithFetchAI(submission);
+      } else {
+        throw new Error(`Primary provider ${this.primaryProvider} not configured`);
+      }
+
+      // If primary provider failed and we have a fallback, try it
+      if (result.error && this.fallbackProvider !== this.primaryProvider) {
+        logger.warn(`Primary provider ${this.primaryProvider} failed, trying fallback ${this.fallbackProvider}`);
+
+        if (this.fallbackProvider === 'asi' && this.asiApiKey) {
+          result = await this.verifyWithASI(submission);
+        } else if (this.fallbackProvider === 'fetch' && this.fetchApiKey) {
+          result = await this.verifyWithFetchAI(submission);
+        } else {
+          logger.warn(`Fallback provider ${this.fallbackProvider} not configured, keeping primary result`);
+        }
+      }
+
+      logger.info(`AI verification completed for milestone ${submission.milestoneId}`, {
+        verdict: result.verdict,
+        confidence: result.confidence,
+        provider: result.provider || this.primaryProvider
+      });
+
+      return result;
+
+    } catch (error) {
+      logger.error(`AI verification failed for milestone ${submission.milestoneId}:`, error);
+
+      // Return uncertain verdict on error
+      return {
+        verdict: 'uncertain',
+        confidence: 0.0,
+        reasoning: 'AI verification service unavailable',
+        error: error.message,
+        provider: 'error'
+      };
     }
-
-    // Analyze evidence using MeTTa knowledge graph
-    const evidenceAnalysis = await this.analyzeEvidence(submission);
-
-    // Get ASI agent verdict
-    const agentVerdict = await this.getAgentVerdict(submission, evidenceAnalysis);
-
-    // Combine results
-    const finalResult = this.combineResults(evidenceAnalysis, agentVerdict);
-
-    logger.info(`AI verification completed for milestone ${submission.milestoneId}`, {
-      verdict: finalResult.verdict,
-      confidence: finalResult.confidence
-    });
-
-    return finalResult;
-
-  } catch (error) {
-    logger.error(`AI verification failed for milestone ${submission.milestoneId}:`, error);
-
-    // Return uncertain verdict on error
-    return {
-      verdict: 'uncertain',
-      confidence: 0.0,
-      reasoning: 'AI verification service unavailable',
-      error: error.message
-    };
   }
-}
 
   /**
-   * Analyze evidence using MeTTa knowledge graph
+   * Verify milestone using ASI (Artificial Super Intelligence)
    */
-  async analyzeEvidence(submission) {
-  try {
-    logger.info(`Analyzing evidence for milestone ${submission.milestoneId}`);
+  async verifyWithASI(submission) {
+    try {
+      logger.debug(`Verifying with ASI for milestone ${submission.milestoneId}`);
 
-    const analysisRequest = {
-      evidence_hash: submission.evidenceHash,
-      evidence_url: submission.evidenceUrl,
-      description: submission.description,
-      milestone_id: submission.milestoneId,
-      campaign_address: submission.campaignAddress
-    };
+      // Analyze evidence using MeTTa knowledge graph
+      const evidenceAnalysis = await this.analyzeEvidenceASI(submission);
 
-    const response = await axios.post(
-      `${this.mettaUrl}/analyze`,
-      analysisRequest,
-      {
-        headers: {
-          'Authorization': `Bearer ${this.asiApiKey}`,
-          'Content-Type': 'application/json'
-        },
-        timeout: 30000
-      }
-    );
+      // Get ASI agent verdict
+      const agentVerdict = await this.getASIAgentVerdict(submission, evidenceAnalysis);
 
-    return {
-      relevance: response.data.relevance || 0.5,
-      completeness: response.data.completeness || 0.5,
-      authenticity: response.data.authenticity || 0.5,
-      reasoning: response.data.reasoning || 'Evidence analysis completed'
-    };
+      // Combine results
+      const finalResult = this.combineResults(evidenceAnalysis, agentVerdict);
+      finalResult.provider = 'asi';
 
-  } catch (error) {
-    logger.error('Evidence analysis failed:', error);
-    return {
-      relevance: 0.5,
-      completeness: 0.5,
-      authenticity: 0.5,
-      reasoning: 'Evidence analysis failed - defaulting to neutral scores'
-    };
+      return finalResult;
+
+    } catch (error) {
+      logger.error('ASI verification failed:', error);
+      return {
+        verdict: 'uncertain',
+        confidence: 0.0,
+        reasoning: 'ASI verification failed',
+        error: error.message,
+        provider: 'asi'
+      };
+    }
   }
-}
+
+  /**
+   * Verify milestone using Fetch.ai network
+   */
+  async verifyWithFetchAI(submission) {
+    try {
+      logger.debug(`Verifying with Fetch.ai for milestone ${submission.milestoneId}`);
+
+      // Analyze evidence using Fetch.ai agents
+      const evidenceAnalysis = await this.analyzeEvidenceFetchAI(submission);
+
+      // Get Fetch.ai agent verdict
+      const agentVerdict = await this.getFetchAIAgentVerdict(submission, evidenceAnalysis);
+
+      // Combine results
+      const finalResult = this.combineResults(evidenceAnalysis, agentVerdict);
+      finalResult.provider = 'fetch';
+
+      return finalResult;
+
+    } catch (error) {
+      logger.error('Fetch.ai verification failed:', error);
+      return {
+        verdict: 'uncertain',
+        confidence: 0.0,
+        reasoning: 'Fetch.ai verification failed',
+        error: error.message,
+        provider: 'fetch'
+      };
+    }
+  }
+
+  /**
+   * Analyze evidence using ASI MeTTa knowledge graph
+   */
+  async analyzeEvidenceASI(submission) {
+    try {
+      logger.debug(`Analyzing evidence with ASI for milestone ${submission.milestoneId}`);
+
+      const analysisRequest = {
+        evidence_hash: submission.evidenceHash,
+        evidence_url: submission.evidenceUrl,
+        description: submission.description,
+        milestone_id: submission.milestoneId,
+        campaign_address: submission.campaignAddress,
+        analysis_type: 'milestone_evidence_verification'
+      };
+
+      const response = await axios.post(
+        `${this.mettaUrl}/analyze`,
+        analysisRequest,
+        {
+          headers: {
+            'Authorization': `Bearer ${this.asiApiKey}`,
+            'Content-Type': 'application/json'
+          },
+          timeout: 30000
+        }
+      );
+
+      return {
+        relevance: response.data.relevance || 0.5,
+        completeness: response.data.completeness || 0.5,
+        authenticity: response.data.authenticity || 0.5,
+        reasoning: response.data.reasoning || 'ASI evidence analysis completed',
+        provider: 'asi'
+      };
+
+    } catch (error) {
+      logger.error('ASI evidence analysis failed:', error);
+      return {
+        relevance: 0.5,
+        completeness: 0.5,
+        authenticity: 0.5,
+        reasoning: 'ASI evidence analysis failed - defaulting to neutral scores',
+        provider: 'asi'
+      };
+    }
+  }
+
+  /**
+   * Analyze evidence using Fetch.ai agents
+   */
+  async analyzeEvidenceFetchAI(submission) {
+    try {
+      logger.debug(`Analyzing evidence with Fetch.ai for milestone ${submission.milestoneId}`);
+
+      const analysisRequest = {
+        task: 'evidence_analysis',
+        input: {
+          evidence_hash: submission.evidenceHash,
+          evidence_url: submission.evidenceUrl,
+          description: submission.description,
+          milestone_id: submission.milestoneId,
+          campaign_address: submission.campaignAddress
+        },
+        parameters: {
+          analysis_depth: 'comprehensive',
+          confidence_required: this.confidenceThreshold
+        }
+      };
+
+      const response = await axios.post(
+        `${this.fetchAgentUrl}/analyze-evidence`,
+        analysisRequest,
+        {
+          headers: {
+            'Authorization': `Bearer ${this.fetchApiKey}`,
+            'Content-Type': 'application/json'
+          },
+          timeout: 45000
+        }
+      );
+
+      return {
+        relevance: response.data.relevance || 0.5,
+        completeness: response.data.completeness || 0.5,
+        authenticity: response.data.authenticity || 0.5,
+        reasoning: response.data.reasoning || 'Fetch.ai evidence analysis completed',
+        provider: 'fetch'
+      };
+
+    } catch (error) {
+      logger.error('Fetch.ai evidence analysis failed:', error);
+      return {
+        relevance: 0.5,
+        completeness: 0.5,
+        authenticity: 0.5,
+        reasoning: 'Fetch.ai evidence analysis failed - defaulting to neutral scores',
+        provider: 'fetch'
+      };
+    }
+  }
 
   /**
    * Get ASI agent verdict using AgentVerse
    */
-  async getAgentVerdict(submission, evidenceAnalysis) {
-  try {
-    logger.info(`Getting ASI agent verdict for milestone ${submission.milestoneId}`);
+  async getASIAgentVerdict(submission, evidenceAnalysis) {
+    try {
+      logger.debug(`Getting ASI agent verdict for milestone ${submission.milestoneId}`);
 
-    const agentRequest = {
-      task: 'milestone_verification',
-      context: {
-        milestone_description: submission.description,
-        evidence_analysis: evidenceAnalysis,
-        campaign_address: submission.campaignAddress
-      },
-      parameters: {
-        confidence_threshold: this.confidenceThreshold,
-        analysis_depth: 'comprehensive'
-      }
-    };
-
-    const response = await axios.post(
-      `${this.agentVerseUrl}/agents/verify`,
-      agentRequest,
-      {
-        headers: {
-          'Authorization': `Bearer ${this.asiApiKey}`,
-          'Content-Type': 'application/json'
+      const agentRequest = {
+        task: 'milestone_verification',
+        context: {
+          milestone_description: submission.description,
+          evidence_analysis: evidenceAnalysis,
+          campaign_address: submission.campaignAddress,
+          real_time_context: submission.realtimeContext
         },
-        timeout: 60000
-      }
-    );
+        parameters: {
+          confidence_threshold: this.confidenceThreshold,
+          analysis_depth: 'comprehensive',
+          risk_assessment: submission.riskAssessment
+        }
+      };
 
-    return {
-      approved: response.data.approved || false,
-      confidence: response.data.confidence || 0.5,
-      reasoning: response.data.reasoning || 'ASI agent analysis completed',
-      recommendations: response.data.recommendations || []
-    };
+      const response = await axios.post(
+        `${this.agentVerseUrl}/agents/verify`,
+        agentRequest,
+        {
+          headers: {
+            'Authorization': `Bearer ${this.agentVerseToken}`,
+            'Content-Type': 'application/json'
+          },
+          timeout: 60000
+        }
+      );
 
-  } catch (error) {
-    logger.error('ASI agent verdict failed:', error);
-    return {
-      approved: false,
-      confidence: 0.0,
-      reasoning: 'ASI agent analysis failed',
-      recommendations: []
-    };
+      return {
+        approved: response.data.approved || false,
+        confidence: response.data.confidence || 0.5,
+        reasoning: response.data.reasoning || 'ASI agent analysis completed',
+        recommendations: response.data.recommendations || [],
+        provider: 'asi'
+      };
+
+    } catch (error) {
+      logger.error('ASI agent verdict failed:', error);
+      return {
+        approved: false,
+        confidence: 0.0,
+        reasoning: 'ASI agent analysis failed',
+        recommendations: [],
+        provider: 'asi'
+      };
+    }
   }
-}
+
+  /**
+   * Get Fetch.ai agent verdict
+   */
+  async getFetchAIAgentVerdict(submission, evidenceAnalysis) {
+    try {
+      logger.debug(`Getting Fetch.ai agent verdict for milestone ${submission.milestoneId}`);
+
+      const agentRequest = {
+        task: 'milestone_verification',
+        context: {
+          milestone_description: submission.description,
+          evidence_analysis: evidenceAnalysis,
+          campaign_address: submission.campaignAddress,
+          real_time_context: submission.realtimeContext
+        },
+        parameters: {
+          confidence_threshold: this.confidenceThreshold,
+          analysis_depth: 'comprehensive',
+          risk_assessment: submission.riskAssessment
+        }
+      };
+
+      const response = await axios.post(
+        `${this.fetchAgentUrl}/verify-milestone`,
+        agentRequest,
+        {
+          headers: {
+            'Authorization': `Bearer ${this.fetchApiKey}`,
+            'Content-Type': 'application/json'
+          },
+          timeout: 75000
+        }
+      );
+
+      return {
+        approved: response.data.approved || false,
+        confidence: response.data.confidence || 0.5,
+        reasoning: response.data.reasoning || 'Fetch.ai agent analysis completed',
+        recommendations: response.data.recommendations || [],
+        provider: 'fetch'
+      };
+
+    } catch (error) {
+      logger.error('Fetch.ai agent verdict failed:', error);
+      return {
+        approved: false,
+        confidence: 0.0,
+        reasoning: 'Fetch.ai agent analysis failed',
+        recommendations: [],
+        provider: 'fetch'
+      };
+    }
+  }
 
 /**
  * Combine evidence analysis and agent verdict

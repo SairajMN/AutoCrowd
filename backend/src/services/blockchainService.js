@@ -16,6 +16,7 @@ class BlockchainService {
         this.wallet = null;
         this.campaignFactoryContract = null;
         this.aiVerificationHandlerContract = null;
+        this.nftContract = null;
         this.chainId = parseInt(process.env.CHAIN_ID) || 11155111;
     }
 
@@ -56,13 +57,20 @@ class BlockchainService {
     async initializeContracts() {
         const campaignFactoryAddress = process.env.CAMPAIGN_FACTORY_ADDRESS;
         const aiHandlerAddress = process.env.AI_VERIFICATION_HANDLER_ADDRESS;
+        const nftContractAddress = process.env.AI_HANDLER_ADDRESS || process.env.CAMPAIGN_MASTER_NFT_ADDRESS;
 
         if (campaignFactoryAddress) {
-            // CampaignFactory ABI (simplified)
+            // CampaignFactory ABI (including KYC functions)
             const campaignFactoryABI = [
                 "function getAllCampaigns() view returns (tuple(address campaignAddress, address creator, string title, uint256 createdAt, bool isActive)[])",
                 "function getCampaignCount() view returns (uint256)",
-                "event CampaignCreated(address indexed campaignAddress, address indexed creator, string title, uint256 goal, uint256 duration)"
+                "function setKYCStatus(address _user, bool _isVerified) external",
+                "function batchSetKYCStatus(address[] calldata _users, bool[] calldata _statuses) external",
+                "function isKYCVerified(address) view returns (bool)",
+                "function getKYCDetails(address) view returns (bool isVerified, uint256 verifiedAt, bool canCreateCampaigns)",
+                "function canCreateCampaign(address) view returns (bool)",
+                "event CampaignCreated(address indexed campaignAddress, address indexed creator, string title, uint256 goal, uint256 duration)",
+                "event KYCStatusUpdated(address indexed user, bool isVerified, uint256 verifiedAt)"
             ];
 
             this.campaignFactoryContract = new ethers.Contract(
@@ -91,6 +99,27 @@ class BlockchainService {
             );
 
             logger.info(`AI Verification Handler contract initialized at ${aiHandlerAddress}`);
+        }
+
+        if (nftContractAddress) {
+            // CampaignMasterNFT ABI
+            const nftABI = [
+                "function mintNFT(address _recipient, string memory _kycProvider, string memory _verificationLevel, string memory _metadataURI) external returns (uint256)",
+                "function hasNFT(address _wallet) external view returns (bool)",
+                "function getTokenId(address _wallet) external view returns (uint256)",
+                "function getVerificationDetails(uint256 _tokenId) external view returns (address walletAddress, uint256 verifiedAt, string memory kycProvider, string memory verificationLevel, string memory metadataURI, bool isActive)",
+                "function tokenDetails(uint256 tokenId) external view returns (address walletAddress, uint256 verifiedAt, string memory kycProvider, string memory verificationLevel, string memory metadataURI, bool isActive)",
+                "function revokeNFT(address _wallet) external",
+                "event NFTMinted(address indexed recipient, uint256 indexed tokenId, string kycProvider, string verificationLevel)"
+            ];
+
+            this.nftContract = new ethers.Contract(
+                nftContractAddress,
+                nftABI,
+                this.wallet || this.provider
+            );
+
+            logger.info(`NFT contract initialized at ${nftContractAddress}`);
         }
     }
 
@@ -622,6 +651,60 @@ class BlockchainService {
     }
 
     /**
+     * Get wallet transactions for identity verification
+     */
+    async getWalletTransactions(walletAddress, limit = 50) {
+        try {
+            logger.debug(`Getting transactions for wallet ${walletAddress}`);
+
+            const axios = require('axios');
+            const blockscoutUrl = process.env.BLOCKSCOUT_API_URL || 'https://eth-sepolia.blockscout.com/api';
+
+            // Get transactions for the wallet
+            const response = await axios.get(`${blockscoutUrl}`, {
+                params: {
+                    module: 'account',
+                    action: 'txlist',
+                    address: walletAddress,
+                    startblock: 0,
+                    endblock: 'latest',
+                    page: 1,
+                    offset: limit,
+                    sort: 'desc' // Most recent first
+                },
+                timeout: 10000
+            });
+
+            const transactions = response.data?.result || [];
+
+            // Parse and format transactions
+            const formattedTransactions = transactions.map(tx => ({
+                hash: tx.hash,
+                timestamp: new Date(parseInt(tx.timeStamp) * 1000),
+                blockNumber: parseInt(tx.blockNumber),
+                from: tx.from.toLowerCase(),
+                to: tx.to ? tx.to.toLowerCase() : null,
+                value: tx.value,
+                gasUsed: tx.gasUsed,
+                gasPrice: tx.gasPrice,
+                contractAddress: tx.contractAddress || null,
+                functionName: tx.functionName || null,
+                methodId: tx.methodId || null,
+                confirmations: tx.confirmations,
+                txreceipt_status: tx.txreceipt_status
+            }));
+
+            logger.debug(`Retrieved ${formattedTransactions.length} transactions for ${walletAddress}`);
+            return formattedTransactions;
+
+        } catch (error) {
+            logger.warn(`Failed to get wallet transactions for ${walletAddress}:`, error.message);
+            // Return empty array instead of throwing to allow graceful degradation
+            return [];
+        }
+    }
+
+    /**
      * Get detailed contributor verification info
      */
     async getDetailedContributorVerification(campaignAddress, contributorAddress, enhanceWithRealtime = true) {
@@ -676,6 +759,270 @@ class BlockchainService {
 
         } catch (error) {
             logger.error(`Failed to get detailed contributor verification:`, error);
+            throw error;
+        }
+    }
+
+    /**
+     * Set KYC verification status on the CampaignFactory contract
+     * @param {string} userAddress - User's wallet address
+     * @param {boolean} isVerified - Verification status
+     * @returns {Object} Transaction result
+     */
+    async setKYCStatus(userAddress, isVerified) {
+        if (!this.campaignFactoryContract || !this.wallet) {
+            throw new Error('CampaignFactory contract or wallet not initialized');
+        }
+
+        try {
+            logger.info(`Setting KYC status for ${userAddress} to ${isVerified}`);
+
+            const tx = await this.campaignFactoryContract.setKYCStatus(userAddress, isVerified);
+            const receipt = await tx.wait();
+
+            logger.info(`KYC status updated. Transaction hash: ${tx.hash}`);
+
+            return {
+                transactionHash: tx.hash,
+                blockNumber: receipt.blockNumber,
+                gasUsed: receipt.gasUsed.toString(),
+                userAddress,
+                isVerified,
+                timestamp: new Date().toISOString()
+            };
+
+        } catch (error) {
+            logger.error(`Failed to set KYC status for ${userAddress}:`, error);
+            throw error;
+        }
+    }
+
+    /**
+     * Batch set KYC verification status for multiple users
+     * @param {string[]} userAddresses - Array of user wallet addresses
+     * @param {boolean[]} statuses - Array of verification statuses
+     * @returns {Object} Transaction result
+     */
+    async batchSetKYCStatus(userAddresses, statuses) {
+        if (!this.campaignFactoryContract || !this.wallet) {
+            throw new Error('CampaignFactory contract or wallet not initialized');
+        }
+
+        if (userAddresses.length !== statuses.length) {
+            throw new Error('User addresses and statuses arrays must have the same length');
+        }
+
+        try {
+            logger.info(`Batch setting KYC status for ${userAddresses.length} users`);
+
+            const tx = await this.campaignFactoryContract.batchSetKYCStatus(userAddresses, statuses);
+            const receipt = await tx.wait();
+
+            logger.info(`Batch KYC status updated. Transaction hash: ${tx.hash}`);
+
+            return {
+                transactionHash: tx.hash,
+                blockNumber: receipt.blockNumber,
+                gasUsed: receipt.gasUsed.toString(),
+                userCount: userAddresses.length,
+                timestamp: new Date().toISOString()
+            };
+
+        } catch (error) {
+            logger.error('Failed to batch set KYC status:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Check if user is KYC verified on-chain
+     * @param {string} userAddress - User's wallet address
+     * @returns {boolean} Verification status
+     */
+    async isKYCVerified(userAddress) {
+        if (!this.campaignFactoryContract) {
+            throw new Error('CampaignFactory contract not initialized');
+        }
+
+        try {
+            const isVerified = await this.campaignFactoryContract.isKYCVerified(userAddress);
+            return isVerified;
+        } catch (error) {
+            logger.error(`Failed to check KYC status for ${userAddress}:`, error);
+            throw error;
+        }
+    }
+
+    /**
+     * Get KYC details for a user
+     * @param {string} userAddress - User's wallet address
+     * @returns {Object} KYC details
+     */
+    async getKYCDetails(userAddress) {
+        if (!this.campaignFactoryContract) {
+            throw new Error('CampaignFactory contract not initialized');
+        }
+
+        try {
+            const details = await this.campaignFactoryContract.getKYCDetails(userAddress);
+            return {
+                isVerified: details.isVerified,
+                verifiedAt: details.verifiedAt.toString(),
+                canCreateCampaigns: details.canCreateCampaigns
+            };
+        } catch (error) {
+            logger.error(`Failed to get KYC details for ${userAddress}:`, error);
+            throw error;
+        }
+    }
+
+    /**
+     * Check if user can create campaigns (KYC verified)
+     * @param {string} userAddress - User's wallet address
+     * @returns {boolean} Whether user can create campaigns
+     */
+    async canCreateCampaign(userAddress) {
+        if (!this.campaignFactoryContract) {
+            throw new Error('CampaignFactory contract not initialized');
+        }
+
+        try {
+            const canCreate = await this.campaignFactoryContract.canCreateCampaign(userAddress);
+            return canCreate;
+        } catch (error) {
+            logger.error(`Failed to check campaign creation permission for ${userAddress}:`, error);
+            throw error;
+        }
+    }
+
+    /**
+     * Mint verification NFT for successful KYC verification
+     * @param {string} recipientAddress - User's wallet address
+     * @param {string} kycProvider - KYC provider name (e.g., 'veriff')
+     * @param {string} verificationLevel - Verification level (e.g., 'Full')
+     * @param {string} metadataURI - IPFS metadata URI
+     * @returns {Object} Minting result with tokenId and transaction hash
+     */
+    async mintVerificationNFT(recipientAddress, kycProvider = 'veriff', verificationLevel = 'Full', metadataURI = '') {
+        if (!this.nftContract || !this.wallet) {
+            throw new Error('NFT contract or wallet not initialized');
+        }
+
+        try {
+            logger.info(`Minting verification NFT for ${recipientAddress} with provider ${kycProvider}`);
+
+            // Check if user already has NFT
+            const hasNFT = await this.nftContract.hasNFT(recipientAddress);
+            if (hasNFT) {
+                logger.info(`User ${recipientAddress} already has NFT, skipping mint`);
+                const tokenId = await this.nftContract.getTokenId(recipientAddress);
+                return {
+                    tokenId: tokenId.toString(),
+                    transactionHash: null,
+                    alreadyExists: true,
+                    contractAddress: await this.nftContract.target || this.nftContract.address
+                };
+            }
+
+            const tx = await this.nftContract.mintNFT(
+                recipientAddress,
+                kycProvider,
+                verificationLevel,
+                metadataURI
+            );
+
+            const receipt = await tx.wait();
+            logger.info(`NFT minted successfully. Transaction hash: ${tx.hash}`);
+
+            // Extract token ID from events
+            const event = receipt.logs.find(log => {
+                try {
+                    const parsed = this.nftContract.interface.parseLog(log);
+                    return parsed.name === 'NFTMinted';
+                } catch {
+                    return false;
+                }
+            });
+
+            let tokenId = '0';
+            if (event) {
+                const parsed = this.nftContract.interface.parseLog(event);
+                tokenId = parsed.args.tokenId.toString();
+            }
+
+            return {
+                tokenId,
+                transactionHash: tx.hash,
+                blockNumber: receipt.blockNumber,
+                gasUsed: receipt.gasUsed.toString(),
+                contractAddress: await this.nftContract.target || this.nftContract.address,
+                recipientAddress,
+                kycProvider,
+                verificationLevel,
+                metadataURI,
+                timestamp: new Date().toISOString()
+            };
+
+        } catch (error) {
+            logger.error(`Failed to mint verification NFT for ${recipientAddress}:`, error);
+            throw error;
+        }
+    }
+
+    /**
+     * Check if user has verification NFT
+     * @param {string} userAddress - User's wallet address
+     * @returns {boolean} Whether user has NFT
+     */
+    async hasVerificationNFT(userAddress) {
+        if (!this.nftContract) {
+            throw new Error('NFT contract not initialized');
+        }
+
+        try {
+            const hasNFT = await this.nftContract.hasNFT(userAddress);
+            return hasNFT;
+        } catch (error) {
+            logger.error(`Failed to check NFT status for ${userAddress}:`, error);
+            throw error;
+        }
+    }
+
+    /**
+     * Get verification NFT details for user
+     * @param {string} userAddress - User's wallet address
+     * @returns {Object} NFT details
+     */
+    async getVerificationNFTDetails(userAddress) {
+        if (!this.nftContract) {
+            throw new Error('NFT contract not initialized');
+        }
+
+        try {
+            // Normalize address to checksum format
+            const normalizedAddress = ethers.getAddress(userAddress.toLowerCase());
+
+            const hasNFT = await this.nftContract.hasNFT(normalizedAddress);
+            if (!hasNFT) {
+                return null;
+            }
+
+            const tokenId = await this.nftContract.getTokenId(normalizedAddress);
+            const details = await this.nftContract.getVerificationDetails(tokenId);
+
+            return {
+                tokenId: tokenId.toString(),
+                walletAddress: details.walletAddress,
+                verifiedAt: details.verifiedAt.toString(),
+                kycProvider: details.kycProvider,
+                verificationLevel: details.verificationLevel,
+                metadataURI: details.metadataURI,
+                isActive: details.isActive,
+                contractAddress: await this.nftContract.target || this.nftContract.address
+            };
+
+        } catch (error) {
+            logger.error(`Failed to get NFT details for ${userAddress}:`, error);
             throw error;
         }
     }

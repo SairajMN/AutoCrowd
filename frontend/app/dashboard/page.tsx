@@ -73,6 +73,12 @@ export default function DashboardPage() {
                                 Home
                             </Link>
                             <Link
+                                href="/kyc"
+                                className="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium"
+                            >
+                                KYC
+                            </Link>
+                            <Link
                                 href="/create"
                                 className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700"
                             >

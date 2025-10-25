@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import Script from 'next/script'
 import './globals.css'
 import { Providers } from './providers'
 
@@ -15,6 +16,10 @@ export default function RootLayout({
     return (
         <html lang="en">
             <body className="bg-gray-50">
+                <Script
+                    src="https://cdn.veriff.me/sdk/js/1.6/veriff.min.js"
+                    strategy="beforeInteractive"
+                />
                 <Providers>
                     {children}
                 </Providers>

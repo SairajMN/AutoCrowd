@@ -33,7 +33,7 @@ class MilestoneVerifierAgent:
     
     def __init__(self):
         self.agent_name = "MilestoneVerifier"
-        self.network = Network.mainnet()  # or Network.testnet() for testing
+        self.network = Network.testnet()  # or Network.testnet() for testing
         self.agent = Agent(
             name=self.agent_name,
             network=self.network

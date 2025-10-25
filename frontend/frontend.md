@@ -2,7 +2,21 @@
 
 ## Overview
 
-The AutoCrowd frontend serves as the sophisticated user interface bridging traditional web experiences with decentralized blockchain crowdfunding. Built with Next.js 14 and powered by cutting-edge Web3 technologies, the frontend delivers a seamless, intelligent crowdfunding platform that combines the trust and transparency of blockchain with the accessibility of modern web applications.
+The AutoCrowd frontend serves as the sophisticated user interface bridging traditional web experiences with decentralized blockchain crowdfunding. Built with Next.js 14 and powered by cutting-edge Web3 technologies and our sponsor ecosystem, the frontend delivers a seamless, intelligent crowdfunding platform that combines the trust and transparency of blockchain with the accessibility of modern web applications.
+
+## 🏆 Integration Partners & Sponsors
+
+### 🤖 ASI (Artificial Super Intelligence) Alliance
+**AI Communication Layer**: **Production-mode** integration with ASI:One chat protocol for real-time agent interactions, milestone verification workflows, and intelligent campaign guidance through conversational AI interfaces.
+
+### 🔐 Veriff KYC Integration
+**Identity Verification**: **Production-ready** KYC system with face verification, document scanning, NFT minting, and secure webhook handling for verified users.
+
+### 🔍 Blockscout
+**Blockchain Visualization**: Seamless integration with Blockscout explorers for transaction tracking, contract verification, and real-time blockchain data visualization within the user interface.
+
+### 💰 PayPal USD (PYUSD)
+**Stablecoin UX**: Comprehensive PYUSD interface with wallet validation, balance display, faucet integration, and user-friendly stablecoin conversion utilities for seamless fundraising experiences.
 
 ## Technology Stack & Architecture
 

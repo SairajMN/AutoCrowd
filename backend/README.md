@@ -1,15 +1,30 @@
 # AutoCrowd Backend
 
-AI-powered backend service for AutoCrowd crowdfunding platform, integrating with ASI Alliance ecosystem for milestone verification.
+**Production-ready** AI-powered backend service for AutoCrowd crowdfunding platform, featuring **real-time Veriff KYC integration**, ASI milestone verification, and comprehensive blockchain intelligence.
+
+## 🏆 Integration Partners & Sponsors
+
+### 🤖 ASI (Artificial Super Intelligence) Alliance
+**Core AI Engine**: **Production-mode** autonomous agents providing intelligent milestone verification, scam detection, and real-time content analysis through MeTTa knowledge graphs and AgentVerse multi-agent platform.
+
+### 🔐 Veriff KYC Integration
+**Identity Verification**: **Production-ready** KYC system with face verification, document scanning, NFT minting, and secure webhook handling for verified users.
+
+### 🔍 Blockscout
+**Blockchain Intelligence**: Real-time transaction monitoring, smart contract event tracking, and comprehensive blockchain data analytics for complete campaign transparency.
+
+### 💰 PayPal USD (PYUSD)
+**Stablecoin Infrastructure**: Enterprise-grade stablecoin processing with sophisticated balance validation, transaction monitoring, and USD-pegged conversion utilities.
 
 ## Features
 
-- **ASI Agent Integration**: AI-powered milestone verification using ASI Alliance agents
-- **MeTTa Knowledge Graph**: Evidence analysis using MeTTa knowledge graphs
-- **AgentVerse Integration**: ASI agent interaction through AgentVerse
-- **Blockchain Integration**: Real-time event listening and contract interaction
-- **RESTful API**: Comprehensive API for frontend integration
-- **Event Processing**: Automated milestone verification workflow
+- **🤖 ASI Multi-Agent System**: Distributed AI verification with AgentVerse coordination
+- **🔍 Blockscout Transaction Intelligence**: Real-time blockchain monitoring and contract event processing
+- **💰 PYUSD Stablecoin Integration**: Advanced balance validation and transaction processing
+- **📊 Real-Time Analytics**: Live market data integration and risk assessment
+- **🔒 Enterprise Security**: Multi-layered fraud detection and authorization
+- **⚡ RESTful API**: Comprehensive endpoints for frontend integration
+- **🔄 Event-Driven Architecture**: Automated workflows based on blockchain events
 
 ## Architecture
 

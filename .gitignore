@@ -160,6 +160,7 @@ playwright-report/
 # Database
 *.db
 *.sqlite
+*.sql
 
 # Secrets and sensitive files
 secrets/
@@ -170,6 +171,7 @@ private/
 *.cer
 *.p12
 *.pfx
+
 
 # Foundry
 broadcast/

@@ -54,6 +54,11 @@ contract CampaignFactoryTest is Test {
     function setUp() public {
         pyusd = new MockERC20("PYUSD", "PYUSD", 18);
         factory = new CampaignFactory(address(pyusd), mockAiHandler);
+
+        // Set up KYC verification for test contract (deployer is KYC oracle)
+        factory.setKYCStatus(address(this), true);
+        factory.setKYCStatus(creator, true);
+        factory.setKYCStatus(address(2), true);
     }
 
     function test_Deployment() public view {
@@ -195,6 +200,12 @@ contract CampaignFactoryTest is Test {
 
     function test_RevertIf_GetCampaignsPaginatedInvalidOffset() public {
         vm.expectRevert("Offset out of bounds");
-        factory.getCampaignsPaginated(10, 5);
+        factory.getCampaignsPaginated(1, 5); // offset > campaigns.length should revert
+    }
+
+    function test_GetCampaignsPaginated_EmptyArray() public {
+        // When offset equals campaigns.length, should return empty array
+        CampaignFactory.CampaignData[] memory result = factory.getCampaignsPaginated(0, 5);
+        assertEq(result.length, 0);
     }
 }

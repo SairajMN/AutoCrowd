@@ -1,8 +1,16 @@
-# PYUSD (PayPal USD) Integration in AutoCrowd: Stablecoin-Powered Crowdfunding
+# PYUSD (PayPal USD) Integration in AutoCrowd
 
 ## Overview
 
-PYUSD serves as the primary stablecoin for the AutoCrowd AI-powered crowdfunding platform, providing a reliable, USD-pegged digital currency (ERC-20 token with 6 decimals) that ensures price stability and seamless fiat-crypto conversion. As PayPal's official stablecoin, PYUSD bridges traditional financial systems with blockchain-based crowdfunding, offering contributors and campaign creators the benefits of cryptocurrency with the stability of fiat currency.
+PYUSD is the **primary stablecoin** powering AutoCrowd's crowdfunding platform, providing reliable USD-pegged transactions on the blockchain. **Currently deployed** on Ethereum Sepolia testnet with full smart contract integration.
+
+## 🚀 Current Production Implementation
+
+### Live PYUSD Integration
+- **✅ Smart Contract Deployed**: PYUSD token contract active on Ethereum Sepolia
+- **✅ Balance Monitoring**: Real-time PYUSD balance tracking
+- **✅ Transaction Processing**: Live contribution and withdrawal handling
+- **✅ Multi-Wallet Support**: Compatible with all major Web3 wallets
 
 ## Core Functions and Use Cases
 
@@ -117,7 +125,7 @@ const weiAmount = parsePYUSDAmount("25.75");
 - Validates address format, balance sufficiency, and network connectivity
 - Provides step-by-step guidance for wallet setup and funding
 - Generates personalized onboarding flows for new users
-- Supports progressive enhancement based on wallet capabilities
+- Supports progressive enhancement Ethereumd on wallet capabilities
 
 **Technical Parameters**:
 - `walletAddress`: Address to validate and prepare
@@ -220,7 +228,7 @@ Provides comprehensive network context for PYUSD operations:
 ## Security & Compliance Considerations
 
 ### **Address Security**
-- Regex-based validation prevents injection attacks
+- Regex-Ethereumd validation prevents injection attacks
 - Checksum validation on supported networks
 - Zero-tolerance approach to invalid address formats
 

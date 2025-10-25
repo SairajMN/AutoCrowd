@@ -4,14 +4,15 @@ import Link from 'next/link'
 
 // Force dynamic rendering to avoid SSR issues with Wagmi
 export const dynamic = 'force-dynamic'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { WalletConnect } from '../../components/WalletConnect'
+import KYCVerification from '../../components/KYCVerification'
 import { useWeb3 } from '../../hooks/useWeb3'
 
 export default function CreateCampaignPage() {
     const router = useRouter()
-    const { createCampaign, isConnected, isCorrectNetwork, switchToNetwork } = useWeb3()
+    const { createCampaign, isConnected, isCorrectNetwork, switchToNetwork, address } = useWeb3()
 
     const [formData, setFormData] = useState({
         title: '',
@@ -26,6 +27,42 @@ export default function CreateCampaignPage() {
 
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [error, setError] = useState('')
+    const [showKYCModal, setShowKYCModal] = useState(false)
+    const [kycStatus, setKycStatus] = useState<'checking' | 'verified' | 'unverified' | 'pending'>('checking')
+
+    // Check KYC status when wallet is connected
+    useEffect(() => {
+        const checkKYCStatus = async () => {
+            if (!address) return;
+
+            try {
+                setKycStatus('checking');
+                const response = await fetch(`/api/kyc/status/${address}`);
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+
+                const result = await response.json();
+                if (result.success) {
+                    const status = result.data;
+                    if (status.isValid) {
+                        setKycStatus('verified');
+                    } else {
+                        setKycStatus('unverified');
+                    }
+                } else {
+                    setKycStatus('unverified');
+                }
+            } catch (error) {
+                console.error('KYC status check failed:', error);
+                setKycStatus('unverified');
+            }
+        };
+
+        if (isConnected && address) {
+            checkKYCStatus();
+        }
+    }, [address, isConnected]);
 
     const updateFormData = (field: string, value: string) => {
         setFormData(prev => ({ ...prev, [field]: value }))
@@ -91,6 +128,12 @@ export default function CreateCampaignPage() {
             return
         }
 
+        // Require real Veriff KYC verification before creating campaign
+        if (kycStatus !== 'verified') {
+            setShowKYCModal(true)
+            return
+        }
+
         setIsSubmitting(true)
         try {
             const milestoneAmounts = milestones.map(m => m.amount)
@@ -109,6 +152,17 @@ export default function CreateCampaignPage() {
             setError(err.message || 'Failed to create campaign. Please try again.')
         } finally {
             setIsSubmitting(false)
+        }
+    }
+
+    const handleKYCComplete = (status: 'verified' | 'rejected' | 'pending') => {
+        if (status === 'verified') {
+            setKycStatus('verified')
+            setShowKYCModal(false)
+        } else if (status === 'rejected') {
+            setKycStatus('unverified')
+            setShowKYCModal(false)
+            setError('KYC verification was rejected. You cannot create campaigns at this time.')
         }
     }
 
@@ -151,6 +205,12 @@ export default function CreateCampaignPage() {
                                 className="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium"
                             >
                                 Home
+                            </Link>
+                            <Link
+                                href="/kyc"
+                                className="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium"
+                            >
+                                KYC
                             </Link>
                             <Link
                                 href="/dashboard"
@@ -329,6 +389,15 @@ export default function CreateCampaignPage() {
                     </div>
                 </form>
             </div>
+
+            {/* KYC Verification Modal */}
+            {showKYCModal && address && (
+                <KYCVerification
+                    walletAddress={address}
+                    onVerificationComplete={handleKYCComplete}
+                    onClose={() => setShowKYCModal(false)}
+                />
+            )}
         </div>
     )
 }

@@ -9,9 +9,11 @@ dotenv.config();
 
 // Import services
 const aiVerificationService = require('./services/aiVerificationService');
+const kycVerificationService = require('./services/kycVerificationService');
 const blockchainService = require('./services/blockchainService');
 const eventListenerService = require('./services/eventListenerService');
 const realtimeDataService = require('./services/realtimeDataService');
+const databaseService = require('./services/databaseService');
 
 // Configure logging
 const logger = winston.createLogger({
@@ -70,6 +72,7 @@ app.get('/health', (req, res) => {
 
 // API Routes
 app.use('/api/verification', require('./routes/verification'));
+app.use('/api/kyc', require('./routes/kyc'));
 app.use('/api/campaigns', require('./routes/campaigns'));
 app.use('/api/events', require('./routes/events'));
 app.use('/api/realtime', require('./routes/realtime'));
@@ -92,6 +95,10 @@ app.use('*', (req, res) => {
 async function initializeServices() {
   try {
     logger.info('Initializing AutoCrowd backend services...');
+
+    // Initialize database service
+    await databaseService.initialize();
+    logger.info('Database service initialized');
 
     // Initialize blockchain service
     await blockchainService.initialize();

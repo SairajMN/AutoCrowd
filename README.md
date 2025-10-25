@@ -2,13 +2,28 @@
 
 A decentralized crowdfunding platform with AI-powered milestone verification using ASI (Autonomous Software Intelligence) agents.
 
+## 🏆 Sponsors & Partners
+
+This project proudly integrates cutting-edge technologies from our sponsors:
+
+### 🤖 [ASI - Artificial Super Intelligence](https://asi.one)
+**Core AI Engine**: Powers intelligent milestone verification, scam detection, and automated content analysis using advanced machine learning and ASI Alliance ecosystem integration.
+
+### 🔍 [Blockscout](https://blockscout.com)
+**Blockchain Intelligence**: Provides comprehensive transaction monitoring, smart contract verification, and real-time blockchain data analytics for complete transparency.
+
+### 💰 [PayPal USD (PYUSD)](https://www.paypal.com/us/digital-wallet/paypal-usd)
+**Stablecoin Infrastructure**: Enables secure, stable contributions through PayPal's official USD-pegged stablecoin with enterprise-grade custody and regulatory compliance.
+
 ## 🚀 Features
 
-- **AI-Powered Verification**: Real-time milestone verification using ASI agents
-- **Blockchain Integration**: Secure smart contracts on Ethereum Sepolia
-- **PYUSD Stablecoin**: US Dollar-pegged stablecoin for contributions
-- **Blockscout Explorer**: Enhanced blockchain exploration capabilities
-- **Production-Ready**: Docker containerization, monitoring, and security hardening
+- **🤖 ASI AI Verification**: Real-time milestone verification using autonomous agents
+- **🔐 Veriff KYC Integration**: Production-ready identity verification with NFT minting
+- **🔍 Blockscout Integration**: Complete blockchain exploration and monitoring
+- **💰 PYUSD Stablecoin**: PayPal-backed stablecoin for contributions
+- **🔒 Enhanced Security**: Multi-layered fraud detection and risk assessment
+- **📊 Real-Time Analytics**: Live market data and blockchain intelligence
+- **🏗️ Production-Ready**: Docker containerization, monitoring, and security hardening
 
 ## 🏗️ Architecture
 
@@ -171,43 +186,27 @@ A decentralized crowdfunding platform with AI-powered milestone verification usi
 
 ## 🔧 Configuration
 
-### Environment Variables
+### Complete Environment Setup
 
-#### Backend (.env)
-```env
-# Server
-PORT=8000
-NODE_ENV=production
+For comprehensive environment variable configuration, see **[ENVIRONMENT_VARIABLES.md](ENVIRONMENT_VARIABLES.md)** - your complete guide to all configuration options including:
 
-# Blockchain
-ETH_RPC_URL=https://eth-sepolia.g.alchemy.com/v2/YOUR_RPC_KEY
-PRIVATE_KEY=YOUR_PRIVATE_KEY
-CHAIN_ID=11155111
+- **Blockchain Configuration**: RPC URLs, private keys, contract addresses
+- **AI Integration**: ASI API credentials, AgentVerse tokens
+- **Database Setup**: Supabase PostgreSQL configuration
+- **Veriff KYC**: Production API keys and webhook settings
+- **Security**: JWT secrets, encryption keys, monitoring
+- **Frontend Settings**: API URLs, feature flags, analytics
 
-# AI/ASI
-ASI_API_KEY=YOUR_ASI_API_KEY
-METTA_KNOWLEDGE_GRAPH_URL=https://metta.asi.one
-AGENT_VERSE_URL=https://agentverse.asi.one
+### Quick Environment Setup
+```bash
+# Copy all environment templates
+cp .env.example .env
+cp backend/.env.example backend/.env
+cp frontend/.env.local.example frontend/.env.local
+cp contracts/.env.example contracts/.env
 
-# Database
-DATABASE_URL=postgresql://user:password@db-host:5432/autocrowd
-REDIS_URL=redis://redis-host:6379
-
-# Security
-JWT_SECRET=YOUR_JWT_SECRET
-ENCRYPTION_KEY=YOUR_ENCRYPTION_KEY
-
-# Monitoring
-SENTRY_DSN=YOUR_SENTRY_DSN
-```
-
-#### Frontend (.env.local)
-```env
-NEXT_PUBLIC_CHAIN_ID=11155111
-NEXT_PUBLIC_RPC_URL=https://eth-sepolia.g.alchemy.com/v2/YOUR_RPC_KEY
-NEXT_PUBLIC_BLOCK_EXPLORER=https://eth-sepolia.blockscout.com
-NEXT_PUBLIC_API_URL=https://your-api-domain.com
-NEXT_PUBLIC_SENTRY_DSN=YOUR_SENTRY_DSN
+# Edit with your actual credentials
+code .env backend/.env frontend/.env.local contracts/.env
 ```
 
 ## 🔒 Security Features
@@ -280,9 +279,28 @@ kubectl apply -f k8s/
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
+## 📚 Documentation
+
+### Core Documentation
+- **[ENVIRONMENT_VARIABLES.md](ENVIRONMENT_VARIABLES.md)** - Complete environment setup guide
+- **[ENHANCED_KYC_SYSTEM.md](ENHANCED_KYC_SYSTEM.md)** - Detailed KYC verification system
+- **[FREE_SERVICES_GUIDE.md](FREE_SERVICES_GUIDE.md)** - Free tier deployment guide
+- **[FETCH_AI_SETUP.md](FETCH_AI_SETUP.md)** - AI integration setup
+
+### Component Documentation
+- **[backend/README.md](backend/README.md)** - Backend API documentation
+- **[frontend/frontend.md](frontend/frontend.md)** - Frontend development guide
+- **[KYC_RESET_GUIDE.md](KYC_RESET_GUIDE.md)** - KYC system maintenance
+- **[QUICK_START_GUIDE.md](QUICK_START_GUIDE.md)** - Fast deployment guide
+
+### Sponsor Documentation
+- **[sponsors/ASI.md](sponsors/ASI.md)** - ASI integration guide
+- **[sponsors/blockscout.md](sponsors/blockscout.md)** - Blockscout setup
+- **[sponsors/PAYPALUSD.md](sponsors/PAYPALUSD.md)** - PYUSD integration
+
 ## 🆘 Support
 
-- **Documentation**: [docs/](docs/)
+- **Documentation**: See comprehensive docs above
 - **Issues**: [GitHub Issues](https://github.com/SairajMN/AutoCrowd/issues)
 - **Discussions**: [GitHub Discussions](https://github.com/SairajMN/AutoCrowd/discussions)
 

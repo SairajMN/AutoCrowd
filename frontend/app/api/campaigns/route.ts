@@ -18,14 +18,25 @@ export async function GET() {
         );
 
         // Fetch campaigns
-        const page = await contract.getCampaignsPaginated(0, 50);
-        const campaigns: CampaignData[] = page.map((c: any) => ({
-            campaignAddress: c.campaignAddress,
-            creator: c.creator,
-            title: c.title,
-            createdAt: Number(c.createdAt),
-            isActive: c.isActive
-        }));
+        let campaigns: CampaignData[] = [];
+        try {
+            const page = await contract.getCampaignsPaginated(0, 50);
+            campaigns = page.map((c: any) => ({
+                campaignAddress: c.campaignAddress,
+                creator: c.creator,
+                title: c.title,
+                createdAt: Number(c.createdAt),
+                isActive: c.isActive
+            }));
+        } catch (error: any) {
+            // Handle case where no campaigns exist yet (contract reverts with "Offset out of bounds")
+            if (error.reason === "Offset out of bounds" || error.message?.includes("Offset out of bounds")) {
+                console.log('Server-side API: No campaigns exist yet, returning empty array');
+                campaigns = [];
+            } else {
+                throw error; // Re-throw other errors
+            }
+        }
 
         console.log('Server-side API: Fetched', campaigns.length, 'campaigns');
 
