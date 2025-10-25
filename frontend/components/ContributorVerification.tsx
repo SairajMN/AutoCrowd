@@ -212,8 +212,7 @@ export const ContributorVerification: React.FC<ContributorVerificationProps> = (
           <div className="flex items-center justify-center space-x-2 mb-4">
             <span className="text-2xl">{getStatusIcon(currentVerification.status)}</span>
             <span className={`text-lg font-semibold ${getStatusColor(currentVerification.status)}`}>
-              {currentVerification.status === 'pending' ? 'Pending' :
-               currentVerification.status === 'verified' ? 'Verified' :
+              {currentVerification.status === 'verified' ? 'Verified' :
                currentVerification.status === 'rejected' ? 'Rejected' : 'Expired'}
             </span>
           </div>
