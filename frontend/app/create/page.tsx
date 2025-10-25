@@ -29,6 +29,7 @@ export default function CreateCampaignPage() {
     const [error, setError] = useState('')
     const [showKYCModal, setShowKYCModal] = useState(false)
     const [kycStatus, setKycStatus] = useState<'checking' | 'verified' | 'unverified' | 'pending'>('checking')
+    const [campaignType, setCampaignType] = useState<'verified' | 'unverified'>('unverified')
 
     // Check KYC status when wallet is connected
     useEffect(() => {
@@ -128,9 +129,8 @@ export default function CreateCampaignPage() {
             return
         }
 
-        // Check if user has NFT verification
-        if (kycStatus !== 'verified') {
-            // Redirect to new verification form
+        // Check verification for verified campaigns
+        if (campaignType === 'verified' && kycStatus !== 'verified') {
             router.push('/verification')
             return
         }
@@ -307,6 +307,49 @@ export default function CreateCampaignPage() {
                                 required
                             />
                         </div>
+                    </div>
+
+                    {/* Campaign Type */}
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-4">
+                            Campaign Type <span className="text-red-500">*</span>
+                        </label>
+                        <div className="space-y-2">
+                            <label className="flex items-center">
+                                <input
+                                    type="radio"
+                                    value="unverified"
+                                    checked={campaignType === 'unverified'}
+                                    onChange={(e) => setCampaignType(e.target.value as 'verified' | 'unverified')}
+                                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
+                                />
+                                <span className="ml-3 text-sm font-medium text-gray-700">Standard Campaign</span>
+                                <span className="ml-2 text-xs text-gray-500">(No verification required)</span>
+                            </label>
+                            <label className="flex items-center">
+                                <input
+                                    type="radio"
+                                    value="verified"
+                                    checked={campaignType === 'verified'}
+                                    onChange={(e) => setCampaignType(e.target.value as 'verified' | 'unverified')}
+                                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
+                                />
+                                <span className="ml-3 text-sm font-medium text-gray-700">Verified Campaign</span>
+                                <span className="ml-2 text-xs text-gray-500">(Requires KYC verification)</span>
+                            </label>
+                        </div>
+                        {campaignType === 'verified' && kycStatus !== 'verified' && kycStatus !== 'checking' && (
+                            <p className="text-yellow-600 text-sm mt-2">
+                                You need to complete verification to create a verified campaign.{' '}
+                                <button
+                                    type="button"
+                                    onClick={() => router.push('/verification')}
+                                    className="text-blue-600 hover:text-blue-500 underline"
+                                >
+                                    Get verified now
+                                </button>
+                            </p>
+                        )}
                     </div>
 
                     {/* Milestones */}
