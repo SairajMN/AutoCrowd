@@ -63,6 +63,24 @@ contract CampaignFactoryTest is Test {
 
     function test_Deployment() public view {
         assertEq(factory.PYUSD(), address(pyusd));
+        // Verify verification system was deployed
+        assertNotEq(address(factory.VERIFICATION_FACTORY()), address(0));
+        assertNotEq(address(factory.VERIFICATION_NFT()), address(0));
+        assertNotEq(address(factory.CAMPAIGN_MASTER_NFT()), address(0));
+    }
+
+    function test_VerificationSystemDeployment() public view {
+        // Verify verification factory exists
+        address verificationFactory = address(factory.VERIFICATION_FACTORY());
+        assertNotEq(verificationFactory, address(0));
+
+        // Verify verification NFT exists
+        address verificationNFT = address(factory.VERIFICATION_NFT());
+        assertNotEq(verificationNFT, address(0));
+
+        // Verify campaign master NFT exists
+        address campaignMasterNFT = address(factory.CAMPAIGN_MASTER_NFT());
+        assertNotEq(campaignMasterNFT, address(0));
     }
 
     function test_CreateCampaign() public {

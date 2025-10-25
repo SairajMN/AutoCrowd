@@ -53,7 +53,10 @@ contract CampaignFactory {
     constructor(address _pyusd, address _defaultAiHandler) {
         PYUSD = _pyusd;
         DEFAULT_AI_HANDLER = _defaultAiHandler;
+
+        // Deploy creator KYC NFT contract
         CAMPAIGN_MASTER_NFT = new CampaignMasterNFT(address(this));
+
         kycOracle = msg.sender; // Deployer is initial KYC oracle
     }
 

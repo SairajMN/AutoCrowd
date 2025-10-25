@@ -9,6 +9,7 @@ dotenv.config();
 
 // Import services
 const aiVerificationService = require('./services/aiVerificationService');
+const newVerificationService = require('./services/newVerificationService');
 const kycVerificationService = require('./services/kycVerificationService');
 const blockchainService = require('./services/blockchainService');
 const eventListenerService = require('./services/eventListenerService');
@@ -72,6 +73,7 @@ app.get('/health', (req, res) => {
 
 // API Routes
 app.use('/api/verification', require('./routes/verification'));
+app.use('/api/new-verification', require('./routes/newVerification'));
 app.use('/api/kyc', require('./routes/kyc'));
 app.use('/api/campaigns', require('./routes/campaigns'));
 app.use('/api/events', require('./routes/events'));
