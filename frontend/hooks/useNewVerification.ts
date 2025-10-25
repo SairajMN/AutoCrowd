@@ -110,7 +110,8 @@ export function useNewVerification(): NewVerificationHook {
     setIsVerificationComplete(false);
 
     try {
-      const response = await fetch('/api/new-verification/contributor/verify', {
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+      const response = await fetch(`${backendUrl}/api/new-verification/contributor/verify`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -172,7 +173,8 @@ export function useNewVerification(): NewVerificationHook {
     setError(null);
 
     try {
-      const response = await fetch('/api/new-verification/milestone/verify', {
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+      const response = await fetch(`${backendUrl}/api/new-verification/milestone/verify`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -225,7 +227,8 @@ export function useNewVerification(): NewVerificationHook {
     setError(null);
 
     try {
-      const response = await fetch(`/api/new-verification/status/${requestId}`);
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+      const response = await fetch(`${backendUrl}/api/new-verification/status/${requestId}`);
 
       if (response.status === 404) return null;
 
@@ -262,8 +265,9 @@ export function useNewVerification(): NewVerificationHook {
     setError(null);
 
     try {
-      const contributorResponse = await fetch(`/api/new-verification/campaign/${campaignAddress}/contributors`);
-      const milestoneResponse = await fetch(`/api/new-verification/campaign/${campaignAddress}/milestones`);
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+      const contributorResponse = await fetch(`${backendUrl}/api/new-verification/campaign/${campaignAddress}/contributors`);
+      const milestoneResponse = await fetch(`${backendUrl}/api/new-verification/campaign/${campaignAddress}/milestones`);
 
       const [contributorResult, milestoneResult] = await Promise.all([
         contributorResponse.ok ? contributorResponse.json() : { success: false },
@@ -293,7 +297,8 @@ export function useNewVerification(): NewVerificationHook {
     setError(null);
 
     try {
-      const response = await fetch(`/api/new-verification/verifier/${verifierAddress}`);
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+      const response = await fetch(`${backendUrl}/api/new-verification/verifier/${verifierAddress}`);
 
       if (response.status === 404) return null;
 

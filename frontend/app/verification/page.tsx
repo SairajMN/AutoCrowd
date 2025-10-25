@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import Image from 'next/image';
 import { WalletConnect } from '../../components/WalletConnect';
 import { useWeb3 } from '../../hooks/useWeb3';
 
@@ -415,7 +416,7 @@ export default function VerificationPage() {
                                             <div key={index} className="flex items-center justify-between bg-gray-50 rounded p-2">
                                                 <div className="flex items-center space-x-2">
                                                     {uploadedFile.preview && (
-                                                        <img src={uploadedFile.preview} alt="Preview" className="w-8 h-8 object-cover rounded" />
+                                                        <Image src={uploadedFile.preview} alt="Preview" width={32} height={32} className="w-8 h-8 object-cover rounded" />
                                                     )}
                                                     <span className="text-sm text-gray-700">{uploadedFile.file.name}</span>
                                                     <span className="text-xs text-gray-500">({uploadedFile.type})</span>
