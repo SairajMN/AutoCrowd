@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {Script} from "forge-std/Script.sol";
+import {Script, console} from "forge-std/Script.sol";
 import {CampaignFactory} from "../src/CampaignFactory.sol";
 import {AICrowdfundingCampaign} from "../src/AICrowdfundingCampaign.sol";
 import {VerificationNFT} from "../src/VerificationNFT.sol";

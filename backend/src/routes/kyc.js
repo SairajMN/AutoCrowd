@@ -60,7 +60,20 @@ router.get('/status/:walletAddress', async (req, res) => {
       .single();
 
     if (error && error.code !== 'PGRST116') {
-      throw error;
+      logger.error(`Database error checking KYC for ${walletAddress}:`, error);
+      // Fallback: assume unverified if database fails
+      return res.json({
+        success: true,
+        data: {
+          isValid: false,
+          walletAddress,
+          verificationType: null,
+          provider: null,
+          completedAt: null,
+          verificationData: null,
+          databaseError: error.message
+        }
+      });
     }
 
     const isValid = verification !== null;
@@ -480,5 +493,79 @@ router.post('/verify-and-mint', async (req, res) => {
 });
 
 
+
+/**
+ * POST /api/kyc/test-set-kyc-status
+ * Manually set KYC status for testing/development (DO NOT USE IN PRODUCTION)
+ */
+router.post('/test-set-kyc-status', async (req, res) => {
+  try {
+    const { walletAddress, isVerified = true } = req.body;
+
+    // Validate required fields
+    if (!walletAddress) {
+      return res.status(400).json({
+        error: 'walletAddress is required'
+      });
+    }
+
+    // Validate wallet address format
+    if (!/^0x[a-fA-F0-9]{40}$/.test(walletAddress)) {
+      return res.status(400).json({
+        error: 'Invalid wallet address format'
+      });
+    }
+
+    logger.warn(`TEST ENDPOINT: Manually setting KYC status for ${walletAddress} to ${isVerified}`);
+
+    const blockchainService = require('../services/blockchainService');
+
+    // Set KYC status on-chain
+    const result = await blockchainService.setKYCStatus(walletAddress, isVerified);
+
+    // Also update database for consistency
+    const databaseService = require('../services/databaseService');
+    try {
+      await databaseService.supabase
+        .from('creator_verifications')
+        .upsert({
+          session_id: `manual_kyc_${walletAddress.toLowerCase()}_${Date.now()}`,
+          wallet_address: walletAddress.toLowerCase(),
+          status: isVerified ? 'completed' : 'unverified',
+          verification_type: 'manual_test',
+          provider: 'test_oracle',
+          verification_data: {
+            manuallySet: true,
+            setAt: new Date().toISOString(),
+            blockchainTx: result.transactionHash
+          },
+          completed_at: isVerified ? new Date().toISOString() : null,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        });
+    } catch (dbError) {
+      logger.warn('Database update failed, but blockchain update succeeded:', dbError.message);
+    }
+
+    res.json({
+      success: true,
+      message: `KYC status manually set to ${isVerified} for ${walletAddress}`,
+      data: {
+        walletAddress,
+        isVerified,
+        transactionHash: result.transactionHash,
+        testEndpoint: true,
+        warning: 'This is a test endpoint and should not be used in production'
+      }
+    });
+
+  } catch (error) {
+    logger.error('Failed to manually set KYC status:', error);
+    res.status(500).json({
+      error: 'Failed to set KYC status',
+      message: error.message
+    });
+  }
+});
 
 module.exports = router;
