@@ -272,6 +272,19 @@ AI_VERIFICATION_HANDLER_ADDRESS=0x5Eeb0cda16903c2b3c867E0029a5Fb20792a3832
 
 ```
 
+### ADDRESS USED FOR TESTING
+```treminal
+
+Address1 : 0x754142F6be13FbBfDf3643B73B0C79a622320953
+Address2 : 0x6951DCad9Ef99075DF2f13657dbe879d49C3EDd8
+
+```
+
+### FAUCET PROVIDER
+```
+https://cloud.google.com/application/web3/faucet/ethereum/sepolia/pyusd
+```
+
 ### Cloud Platforms
 - **AWS**: ECS, EKS, or Elastic Beanstalk
 - **Google Cloud**: Cloud Run or GKE
